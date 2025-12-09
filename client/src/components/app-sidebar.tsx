@@ -6,6 +6,7 @@ import {
   Users,
   Settings,
   GraduationCap,
+  BarChart3,
 } from "lucide-react";
 import {
   Sidebar,
@@ -42,6 +43,11 @@ const navigationItems = [
     title: "Seat Management",
     url: "/seats",
     icon: Users,
+  },
+  {
+    title: "Reports",
+    url: "/reports",
+    icon: BarChart3,
   },
 ];
 

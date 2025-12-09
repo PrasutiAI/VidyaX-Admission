@@ -14,6 +14,7 @@ import Applications from "@/pages/applications";
 import ApplicationForm from "@/pages/application-form";
 import ApplicationDetail from "@/pages/application-detail";
 import Seats from "@/pages/seats";
+import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
 
 function Router() {
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/applications/new" component={ApplicationForm} />
       <Route path="/applications/:id" component={ApplicationDetail} />
       <Route path="/seats" component={Seats} />
+      <Route path="/reports" component={Reports} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
