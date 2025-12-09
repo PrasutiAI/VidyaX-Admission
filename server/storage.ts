@@ -53,6 +53,23 @@ export interface IStorage {
   
   // Dashboard Stats
   getDashboardStats(): Promise<{ totalApplications: number; pendingReviews: number; enrolled: number; enrollmentRate: number }>;
+  
+  // Seat Availability
+  getSeatAvailability(cycleId: string): Promise<any[]>;
+  
+  // Scheduling
+  scheduleEntranceTest(applicationId: string, date: string): Promise<AdmissionApplication | undefined>;
+  scheduleInterview(applicationId: string, date: string): Promise<AdmissionApplication | undefined>;
+  
+  // Enrollment Workflow
+  generateOffer(applicationId: string, remarks?: string): Promise<AdmissionApplication | undefined>;
+  acceptOffer(applicationId: string): Promise<AdmissionApplication | undefined>;
+  completeEnrollment(applicationId: string): Promise<AdmissionApplication | undefined>;
+  
+  // Reports
+  getApplicationSummary(): Promise<any>;
+  getEnrollmentReport(): Promise<any>;
+  getDocumentVerificationReport(): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -294,6 +311,210 @@ export class DatabaseStorage implements IStorage {
       pendingReviews: pending,
       enrolled,
       enrollmentRate,
+    };
+  }
+
+  // Seat Availability
+  async getSeatAvailability(cycleId: string): Promise<any[]> {
+    const configs = await this.getSeatConfigs(cycleId);
+    const availability = await Promise.all(configs.map(async (config) => {
+      const enrolledResult = await db.select({ count: sql<number>`count(*)` })
+        .from(admissionApplications)
+        .where(and(
+          eq(admissionApplications.admissionCycleId, cycleId),
+          eq(admissionApplications.gradeAppliedFor, config.gradeId),
+          eq(admissionApplications.status, "enrolled")
+        ));
+      const enrolled = Number(enrolledResult[0]?.count || 0);
+
+      const offeredResult = await db.select({ count: sql<number>`count(*)` })
+        .from(admissionApplications)
+        .where(and(
+          eq(admissionApplications.admissionCycleId, cycleId),
+          eq(admissionApplications.gradeAppliedFor, config.gradeId),
+          inArray(admissionApplications.status, ["offer_extended", "offer_accepted"])
+        ));
+      const offered = Number(offeredResult[0]?.count || 0);
+
+      return {
+        ...config,
+        enrolled,
+        offered,
+        available: config.totalSeats - enrolled - offered,
+      };
+    }));
+    return availability;
+  }
+
+  // Scheduling
+  async scheduleEntranceTest(applicationId: string, date: string): Promise<AdmissionApplication | undefined> {
+    const [updated] = await db.update(admissionApplications)
+      .set({ 
+        entranceTestDate: date, 
+        status: "entrance_test_scheduled" as any,
+        updatedAt: new Date() 
+      })
+      .where(eq(admissionApplications.id, applicationId))
+      .returning();
+    
+    if (updated) {
+      await this.createStatusHistoryEntry({
+        applicationId,
+        fromStatus: "documents_verified",
+        toStatus: "entrance_test_scheduled",
+        remarks: `Entrance test scheduled for ${date}`,
+      });
+    }
+    return updated || undefined;
+  }
+
+  async scheduleInterview(applicationId: string, date: string): Promise<AdmissionApplication | undefined> {
+    const [updated] = await db.update(admissionApplications)
+      .set({ 
+        interviewDate: date, 
+        status: "interview_scheduled" as any,
+        updatedAt: new Date() 
+      })
+      .where(eq(admissionApplications.id, applicationId))
+      .returning();
+    
+    if (updated) {
+      await this.createStatusHistoryEntry({
+        applicationId,
+        fromStatus: "entrance_test_completed",
+        toStatus: "interview_scheduled",
+        remarks: `Interview scheduled for ${date}`,
+      });
+    }
+    return updated || undefined;
+  }
+
+  // Enrollment Workflow
+  async generateOffer(applicationId: string, remarks?: string): Promise<AdmissionApplication | undefined> {
+    const current = await this.getApplication(applicationId);
+    if (!current) return undefined;
+
+    const [updated] = await db.update(admissionApplications)
+      .set({ 
+        status: "offer_extended" as any,
+        decisionDate: new Date(),
+        decisionRemarks: remarks,
+        updatedAt: new Date() 
+      })
+      .where(eq(admissionApplications.id, applicationId))
+      .returning();
+    
+    if (updated) {
+      await this.createStatusHistoryEntry({
+        applicationId,
+        fromStatus: current.status,
+        toStatus: "offer_extended",
+        remarks: remarks || "Admission offer extended",
+      });
+    }
+    return updated || undefined;
+  }
+
+  async acceptOffer(applicationId: string): Promise<AdmissionApplication | undefined> {
+    const [updated] = await db.update(admissionApplications)
+      .set({ 
+        status: "offer_accepted" as any,
+        updatedAt: new Date() 
+      })
+      .where(eq(admissionApplications.id, applicationId))
+      .returning();
+    
+    if (updated) {
+      await this.createStatusHistoryEntry({
+        applicationId,
+        fromStatus: "offer_extended",
+        toStatus: "offer_accepted",
+        remarks: "Admission offer accepted",
+      });
+    }
+    return updated || undefined;
+  }
+
+  async completeEnrollment(applicationId: string): Promise<AdmissionApplication | undefined> {
+    const [updated] = await db.update(admissionApplications)
+      .set({ 
+        status: "enrolled" as any,
+        updatedAt: new Date() 
+      })
+      .where(eq(admissionApplications.id, applicationId))
+      .returning();
+    
+    if (updated) {
+      await this.createStatusHistoryEntry({
+        applicationId,
+        fromStatus: "offer_accepted",
+        toStatus: "enrolled",
+        remarks: "Enrollment completed",
+      });
+    }
+    return updated || undefined;
+  }
+
+  // Reports
+  async getApplicationSummary(): Promise<any> {
+    const statusCounts = await db.select({
+      status: admissionApplications.status,
+      count: sql<number>`count(*)`,
+    })
+      .from(admissionApplications)
+      .groupBy(admissionApplications.status);
+
+    const gradeCounts = await db.select({
+      grade: admissionApplications.gradeAppliedFor,
+      count: sql<number>`count(*)`,
+    })
+      .from(admissionApplications)
+      .groupBy(admissionApplications.gradeAppliedFor);
+
+    return {
+      byStatus: statusCounts.map(s => ({ status: s.status, count: Number(s.count) })),
+      byGrade: gradeCounts.map(g => ({ grade: g.grade, count: Number(g.count) })),
+    };
+  }
+
+  async getEnrollmentReport(): Promise<any> {
+    const enrolled = await db.select()
+      .from(admissionApplications)
+      .where(eq(admissionApplications.status, "enrolled"))
+      .orderBy(desc(admissionApplications.updatedAt));
+
+    const byGrade = await db.select({
+      grade: admissionApplications.gradeAppliedFor,
+      count: sql<number>`count(*)`,
+    })
+      .from(admissionApplications)
+      .where(eq(admissionApplications.status, "enrolled"))
+      .groupBy(admissionApplications.gradeAppliedFor);
+
+    return {
+      totalEnrolled: enrolled.length,
+      enrolledStudents: enrolled,
+      byGrade: byGrade.map(g => ({ grade: g.grade, count: Number(g.count) })),
+    };
+  }
+
+  async getDocumentVerificationReport(): Promise<any> {
+    const pending = await db.select({ count: sql<number>`count(*)` })
+      .from(applicationDocuments)
+      .where(eq(applicationDocuments.verificationStatus, "pending"));
+    
+    const verified = await db.select({ count: sql<number>`count(*)` })
+      .from(applicationDocuments)
+      .where(eq(applicationDocuments.verificationStatus, "verified"));
+    
+    const rejected = await db.select({ count: sql<number>`count(*)` })
+      .from(applicationDocuments)
+      .where(eq(applicationDocuments.verificationStatus, "rejected"));
+
+    return {
+      pending: Number(pending[0]?.count || 0),
+      verified: Number(verified[0]?.count || 0),
+      rejected: Number(rejected[0]?.count || 0),
     };
   }
 }

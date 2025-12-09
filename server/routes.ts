@@ -366,5 +366,134 @@ export async function registerRoutes(
     }
   });
 
+  // Seat Availability
+  app.get("/api/admission/cycles/:id/seats/availability", async (req, res) => {
+    try {
+      const availability = await storage.getSeatAvailability(req.params.id);
+      res.json(availability);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Schedule Entrance Test
+  const scheduleTestSchema = z.object({
+    date: z.string(),
+  });
+
+  app.post("/api/admission/applications/:id/entrance-test", async (req, res) => {
+    try {
+      const validation = validateBody(scheduleTestSchema, req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
+      const application = await storage.scheduleEntranceTest(req.params.id, validation.data.date);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      res.json(application);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Schedule Interview
+  const scheduleInterviewSchema = z.object({
+    date: z.string(),
+  });
+
+  app.post("/api/admission/applications/:id/interview", async (req, res) => {
+    try {
+      const validation = validateBody(scheduleInterviewSchema, req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
+      const application = await storage.scheduleInterview(req.params.id, validation.data.date);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      res.json(application);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Enrollment Workflow - Generate Offer
+  const generateOfferSchema = z.object({
+    remarks: z.string().optional(),
+  });
+
+  app.post("/api/admission/applications/:id/offer", async (req, res) => {
+    try {
+      const validation = validateBody(generateOfferSchema, req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
+      const application = await storage.generateOffer(req.params.id, validation.data.remarks);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      res.json(application);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Enrollment Workflow - Accept Offer
+  app.post("/api/admission/applications/:id/accept-offer", async (req, res) => {
+    try {
+      const application = await storage.acceptOffer(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      res.json(application);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Enrollment Workflow - Complete Enrollment
+  app.post("/api/admission/applications/:id/enroll", async (req, res) => {
+    try {
+      const application = await storage.completeEnrollment(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      res.json(application);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Reports - Application Summary
+  app.get("/api/reports/application-summary", async (req, res) => {
+    try {
+      const summary = await storage.getApplicationSummary();
+      res.json(summary);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Reports - Enrollment Report
+  app.get("/api/reports/enrollment", async (req, res) => {
+    try {
+      const report = await storage.getEnrollmentReport();
+      res.json(report);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Reports - Document Verification Report
+  app.get("/api/reports/document-verification", async (req, res) => {
+    try {
+      const report = await storage.getDocumentVerificationReport();
+      res.json(report);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   return httpServer;
 }
