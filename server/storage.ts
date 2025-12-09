@@ -511,10 +511,15 @@ export class DatabaseStorage implements IStorage {
       .from(applicationDocuments)
       .where(eq(applicationDocuments.verificationStatus, "rejected"));
 
+    const pendingCount = Number(pending[0]?.count || 0);
+    const verifiedCount = Number(verified[0]?.count || 0);
+    const rejectedCount = Number(rejected[0]?.count || 0);
+
     return {
-      pending: Number(pending[0]?.count || 0),
-      verified: Number(verified[0]?.count || 0),
-      rejected: Number(rejected[0]?.count || 0),
+      totalDocuments: pendingCount + verifiedCount + rejectedCount,
+      pending: pendingCount,
+      verified: verifiedCount,
+      rejected: rejectedCount,
     };
   }
 }
