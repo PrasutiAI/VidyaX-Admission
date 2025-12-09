@@ -1,6 +1,47 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { z } from "zod";
+import { fromError } from "zod-validation-error";
+import {
+  insertAdmissionCycleSchema,
+  insertGradeSeatConfigSchema,
+  insertAdmissionApplicationSchema,
+  insertApplicationDocumentSchema,
+} from "@shared/schema";
+
+function validateBody<T>(schema: z.ZodSchema<T>, body: unknown): { success: true; data: T } | { success: false; error: string } {
+  const result = schema.safeParse(body);
+  if (!result.success) {
+    return { success: false, error: fromError(result.error).toString() };
+  }
+  return { success: true, data: result.data };
+}
+
+const cycleStatusSchema = z.object({
+  status: z.enum(["draft", "open", "closed", "archived"]),
+});
+
+const applicationStatusSchema = z.object({
+  status: z.enum([
+    "inquiry", "application_submitted", "documents_pending", "documents_verified",
+    "entrance_test_scheduled", "entrance_test_completed", "interview_scheduled",
+    "interview_completed", "under_review", "waitlisted", "offer_extended",
+    "offer_accepted", "enrolled", "rejected", "withdrawn"
+  ]),
+  remarks: z.string().optional(),
+});
+
+const entranceTestSchema = z.object({
+  date: z.string(),
+  score: z.string(),
+});
+
+const interviewResultSchema = z.object({
+  date: z.string(),
+  score: z.string(),
+  notes: z.string().optional(),
+});
 
 export async function registerRoutes(
   httpServer: Server,
@@ -53,7 +94,11 @@ export async function registerRoutes(
 
   app.post("/api/admission/cycles", async (req, res) => {
     try {
-      const cycle = await storage.createAdmissionCycle(req.body);
+      const validation = validateBody(insertAdmissionCycleSchema, req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
+      const cycle = await storage.createAdmissionCycle(validation.data);
       res.status(201).json(cycle);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -62,7 +107,11 @@ export async function registerRoutes(
 
   app.put("/api/admission/cycles/:id", async (req, res) => {
     try {
-      const cycle = await storage.updateAdmissionCycle(req.params.id, req.body);
+      const validation = validateBody(insertAdmissionCycleSchema.partial(), req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
+      const cycle = await storage.updateAdmissionCycle(req.params.id, validation.data);
       if (!cycle) {
         return res.status(404).json({ message: "Cycle not found" });
       }
@@ -74,8 +123,11 @@ export async function registerRoutes(
 
   app.patch("/api/admission/cycles/:id/status", async (req, res) => {
     try {
-      const { status } = req.body;
-      const cycle = await storage.updateAdmissionCycleStatus(req.params.id, status);
+      const validation = validateBody(cycleStatusSchema, req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
+      const cycle = await storage.updateAdmissionCycleStatus(req.params.id, validation.data.status);
       if (!cycle) {
         return res.status(404).json({ message: "Cycle not found" });
       }
@@ -106,10 +158,12 @@ export async function registerRoutes(
 
   app.post("/api/admission/cycles/:id/seats", async (req, res) => {
     try {
-      const config = await storage.createSeatConfig({
-        ...req.body,
-        admissionCycleId: req.params.id,
-      });
+      const bodyWithCycleId = { ...req.body, admissionCycleId: req.params.id };
+      const validation = validateBody(insertGradeSeatConfigSchema, bodyWithCycleId);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
+      const config = await storage.createSeatConfig(validation.data);
       res.status(201).json(config);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -118,7 +172,11 @@ export async function registerRoutes(
 
   app.put("/api/admission/cycles/:cycleId/seats/:gradeId", async (req, res) => {
     try {
-      const config = await storage.updateSeatConfig(req.params.cycleId, req.params.gradeId, req.body);
+      const validation = validateBody(insertGradeSeatConfigSchema.partial(), req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
+      const config = await storage.updateSeatConfig(req.params.cycleId, req.params.gradeId, validation.data);
       if (!config) {
         return res.status(404).json({ message: "Seat config not found" });
       }
@@ -161,7 +219,11 @@ export async function registerRoutes(
 
   app.post("/api/admission/applications", async (req, res) => {
     try {
-      const application = await storage.createApplication(req.body);
+      const validation = validateBody(insertAdmissionApplicationSchema, req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
+      const application = await storage.createApplication(validation.data);
       res.status(201).json(application);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -170,7 +232,11 @@ export async function registerRoutes(
 
   app.put("/api/admission/applications/:id", async (req, res) => {
     try {
-      const application = await storage.updateApplication(req.params.id, req.body);
+      const validation = validateBody(insertAdmissionApplicationSchema.partial(), req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
+      const application = await storage.updateApplication(req.params.id, validation.data);
       if (!application) {
         return res.status(404).json({ message: "Application not found" });
       }
@@ -182,8 +248,15 @@ export async function registerRoutes(
 
   app.patch("/api/admission/applications/:id/status", async (req, res) => {
     try {
-      const { status, remarks } = req.body;
-      const application = await storage.updateApplicationStatus(req.params.id, status, remarks);
+      const validation = validateBody(applicationStatusSchema, req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
+      const application = await storage.updateApplicationStatus(
+        req.params.id, 
+        validation.data.status, 
+        validation.data.remarks
+      );
       if (!application) {
         return res.status(404).json({ message: "Application not found" });
       }
@@ -196,10 +269,13 @@ export async function registerRoutes(
   // Screening - Entrance Test
   app.put("/api/admission/applications/:id/entrance-test/score", async (req, res) => {
     try {
-      const { date, score } = req.body;
+      const validation = validateBody(entranceTestSchema, req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
       const application = await storage.updateApplication(req.params.id, {
-        entranceTestDate: date,
-        entranceTestScore: score,
+        entranceTestDate: validation.data.date,
+        entranceTestScore: validation.data.score,
       });
       if (!application) {
         return res.status(404).json({ message: "Application not found" });
@@ -213,11 +289,14 @@ export async function registerRoutes(
   // Screening - Interview
   app.put("/api/admission/applications/:id/interview/result", async (req, res) => {
     try {
-      const { date, score, notes } = req.body;
+      const validation = validateBody(interviewResultSchema, req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
       const application = await storage.updateApplication(req.params.id, {
-        interviewDate: date,
-        interviewScore: score,
-        interviewNotes: notes,
+        interviewDate: validation.data.date,
+        interviewScore: validation.data.score,
+        interviewNotes: validation.data.notes,
       });
       if (!application) {
         return res.status(404).json({ message: "Application not found" });
@@ -240,10 +319,12 @@ export async function registerRoutes(
 
   app.post("/api/admission/applications/:id/documents", async (req, res) => {
     try {
-      const document = await storage.createApplicationDocument({
-        ...req.body,
-        applicationId: req.params.id,
-      });
+      const bodyWithAppId = { ...req.body, applicationId: req.params.id };
+      const validation = validateBody(insertApplicationDocumentSchema, bodyWithAppId);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
+      const document = await storage.createApplicationDocument(validation.data);
       res.status(201).json(document);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
