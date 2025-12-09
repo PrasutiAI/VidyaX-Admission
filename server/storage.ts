@@ -44,6 +44,7 @@ export interface IStorage {
   // Documents
   getApplicationDocuments(applicationId: string): Promise<ApplicationDocument[]>;
   createApplicationDocument(document: InsertApplicationDocument): Promise<ApplicationDocument>;
+  updateDocumentVerification(id: string, status: "pending" | "verified" | "rejected", remarks?: string): Promise<ApplicationDocument | undefined>;
   deleteApplicationDocument(id: string): Promise<boolean>;
   
   // Status History
@@ -236,6 +237,21 @@ export class DatabaseStorage implements IStorage {
   async createApplicationDocument(document: InsertApplicationDocument): Promise<ApplicationDocument> {
     const [created] = await db.insert(applicationDocuments).values(document).returning();
     return created;
+  }
+
+  async updateDocumentVerification(id: string, status: "pending" | "verified" | "rejected", remarks?: string): Promise<ApplicationDocument | undefined> {
+    const updateData: any = { 
+      verificationStatus: status,
+      verifiedAt: status === "verified" ? new Date() : null,
+    };
+    if (remarks !== undefined) {
+      updateData.remarks = remarks;
+    }
+    const [updated] = await db.update(applicationDocuments)
+      .set(updateData)
+      .where(eq(applicationDocuments.id, id))
+      .returning();
+    return updated || undefined;
   }
 
   async deleteApplicationDocument(id: string): Promise<boolean> {

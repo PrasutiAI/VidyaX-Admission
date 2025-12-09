@@ -113,6 +113,10 @@ export default function ApplicationDetail() {
     score: "",
     notes: "",
   });
+  const [isDocVerifyDialogOpen, setIsDocVerifyDialogOpen] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<ApplicationDocument | null>(null);
+  const [docVerifyAction, setDocVerifyAction] = useState<"verified" | "rejected">("verified");
+  const [docVerifyRemarks, setDocVerifyRemarks] = useState("");
 
   const { data: application, isLoading } = useQuery<ApplicationWithRelations>({
     queryKey: ["/api/admission/applications", params.id],
@@ -151,6 +155,32 @@ export default function ApplicationDetail() {
       toast({ title: "Failed to save results", description: error.message, variant: "destructive" });
     },
   });
+
+  const documentVerifyMutation = useMutation({
+    mutationFn: async (data: { docId: string; status: "verified" | "rejected"; remarks?: string }) => {
+      return apiRequest("PATCH", `/api/admission/applications/${params.id}/documents/${data.docId}/verify`, {
+        status: data.status,
+        remarks: data.remarks,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admission/applications", params.id] });
+      setIsDocVerifyDialogOpen(false);
+      setSelectedDocument(null);
+      setDocVerifyRemarks("");
+      toast({ title: `Document ${docVerifyAction} successfully` });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to update document", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const openDocVerifyDialog = (doc: ApplicationDocument, action: "verified" | "rejected") => {
+    setSelectedDocument(doc);
+    setDocVerifyAction(action);
+    setDocVerifyRemarks("");
+    setIsDocVerifyDialogOpen(true);
+  };
 
   if (isLoading) {
     return (
@@ -361,6 +391,7 @@ export default function ApplicationDetail() {
                         <div 
                           key={doc.id}
                           className="flex items-center justify-between p-4 rounded-lg border"
+                          data-testid={`document-row-${doc.id}`}
                         >
                           <div className="flex items-center gap-3">
                             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
@@ -373,12 +404,39 @@ export default function ApplicationDetail() {
                               </p>
                             </div>
                           </div>
-                          <Badge 
-                            variant="outline"
-                            className={`${documentVerificationColors[doc.verificationStatus].bg} ${documentVerificationColors[doc.verificationStatus].text} border-0`}
-                          >
-                            {doc.verificationStatus.charAt(0).toUpperCase() + doc.verificationStatus.slice(1)}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            {doc.verificationStatus === "pending" ? (
+                              <>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => openDocVerifyDialog(doc, "verified")}
+                                  data-testid={`button-verify-doc-${doc.id}`}
+                                  className="text-emerald-600 hover:text-emerald-700"
+                                >
+                                  <CheckCircle2 className="h-4 w-4 mr-1" />
+                                  Verify
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => openDocVerifyDialog(doc, "rejected")}
+                                  data-testid={`button-reject-doc-${doc.id}`}
+                                  className="text-red-600 hover:text-red-700"
+                                >
+                                  <X className="h-4 w-4 mr-1" />
+                                  Reject
+                                </Button>
+                              </>
+                            ) : (
+                              <Badge 
+                                variant="outline"
+                                className={`${documentVerificationColors[doc.verificationStatus].bg} ${documentVerificationColors[doc.verificationStatus].text} border-0`}
+                              >
+                                {doc.verificationStatus.charAt(0).toUpperCase() + doc.verificationStatus.slice(1)}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>

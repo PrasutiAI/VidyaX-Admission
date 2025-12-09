@@ -340,5 +340,31 @@ export async function registerRoutes(
     }
   });
 
+  // Document Verification
+  const documentVerificationSchema = z.object({
+    status: z.enum(["pending", "verified", "rejected"]),
+    remarks: z.string().optional(),
+  });
+
+  app.patch("/api/admission/applications/:appId/documents/:docId/verify", async (req, res) => {
+    try {
+      const validation = validateBody(documentVerificationSchema, req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
+      const document = await storage.updateDocumentVerification(
+        req.params.docId, 
+        validation.data.status,
+        validation.data.remarks
+      );
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      res.json(document);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   return httpServer;
 }
