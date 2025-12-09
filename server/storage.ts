@@ -6,6 +6,8 @@ import {
   applicationDocuments, type ApplicationDocument, type InsertApplicationDocument,
   applicationStatusHistory, type ApplicationStatusHistory, type InsertApplicationStatusHistory,
   seatReservations, type SeatReservation, type InsertSeatReservation,
+  applicationCommunications, type ApplicationCommunication, type InsertApplicationCommunication,
+  notifications, type Notification, type InsertNotification,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sql, inArray } from "drizzle-orm";
@@ -70,6 +72,22 @@ export interface IStorage {
   getApplicationSummary(): Promise<any>;
   getEnrollmentReport(): Promise<any>;
   getDocumentVerificationReport(): Promise<any>;
+  
+  // Communications
+  getApplicationCommunications(applicationId: string): Promise<ApplicationCommunication[]>;
+  createCommunication(communication: InsertApplicationCommunication): Promise<ApplicationCommunication>;
+  
+  // Notifications
+  getNotifications(): Promise<Notification[]>;
+  getUnreadNotificationsCount(): Promise<number>;
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  markNotificationRead(id: string): Promise<Notification | undefined>;
+  markAllNotificationsRead(): Promise<void>;
+  
+  // Analytics
+  getApplicationsByStatus(): Promise<{ status: string; count: number }[]>;
+  getApplicationTrends(): Promise<{ date: string; count: number }[]>;
+  getScheduledEvents(): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -521,6 +539,107 @@ export class DatabaseStorage implements IStorage {
       verified: verifiedCount,
       rejected: rejectedCount,
     };
+  }
+
+  // Communications
+  async getApplicationCommunications(applicationId: string): Promise<ApplicationCommunication[]> {
+    return db.select().from(applicationCommunications)
+      .where(eq(applicationCommunications.applicationId, applicationId))
+      .orderBy(desc(applicationCommunications.createdAt));
+  }
+
+  async createCommunication(communication: InsertApplicationCommunication): Promise<ApplicationCommunication> {
+    const [created] = await db.insert(applicationCommunications).values(communication).returning();
+    return created;
+  }
+
+  // Notifications
+  async getNotifications(): Promise<Notification[]> {
+    return db.select().from(notifications)
+      .orderBy(desc(notifications.createdAt))
+      .limit(50);
+  }
+
+  async getUnreadNotificationsCount(): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .where(eq(notifications.isRead, "false"));
+    return Number(result[0]?.count || 0);
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [created] = await db.insert(notifications).values(notification).returning();
+    return created;
+  }
+
+  async markNotificationRead(id: string): Promise<Notification | undefined> {
+    const [updated] = await db.update(notifications)
+      .set({ isRead: "true" })
+      .where(eq(notifications.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async markAllNotificationsRead(): Promise<void> {
+    await db.update(notifications).set({ isRead: "true" }).where(eq(notifications.isRead, "false"));
+  }
+
+  // Analytics
+  async getApplicationsByStatus(): Promise<{ status: string; count: number }[]> {
+    const results = await db.select({
+      status: admissionApplications.status,
+      count: sql<number>`count(*)`,
+    })
+      .from(admissionApplications)
+      .groupBy(admissionApplications.status);
+    return results.map(r => ({ status: r.status, count: Number(r.count) }));
+  }
+
+  async getApplicationTrends(): Promise<{ date: string; count: number }[]> {
+    const results = await db.select({
+      date: sql<string>`DATE(${admissionApplications.applicationDate})`,
+      count: sql<number>`count(*)`,
+    })
+      .from(admissionApplications)
+      .groupBy(sql`DATE(${admissionApplications.applicationDate})`)
+      .orderBy(sql`DATE(${admissionApplications.applicationDate})`);
+    return results.map(r => ({ date: r.date, count: Number(r.count) }));
+  }
+
+  async getScheduledEvents(): Promise<any[]> {
+    const testsScheduled = await db.select()
+      .from(admissionApplications)
+      .where(and(
+        eq(admissionApplications.status, "entrance_test_scheduled"),
+        sql`${admissionApplications.entranceTestDate} IS NOT NULL`
+      ));
+    
+    const interviewsScheduled = await db.select()
+      .from(admissionApplications)
+      .where(and(
+        eq(admissionApplications.status, "interview_scheduled"),
+        sql`${admissionApplications.interviewDate} IS NOT NULL`
+      ));
+
+    const events = [
+      ...testsScheduled.map(app => ({
+        id: app.id,
+        type: "entrance_test",
+        date: app.entranceTestDate,
+        studentName: `${app.studentFirstName} ${app.studentLastName}`,
+        applicationNumber: app.applicationNumber,
+        grade: app.gradeAppliedFor,
+      })),
+      ...interviewsScheduled.map(app => ({
+        id: app.id,
+        type: "interview",
+        date: app.interviewDate,
+        studentName: `${app.studentFirstName} ${app.studentLastName}`,
+        applicationNumber: app.applicationNumber,
+        grade: app.gradeAppliedFor,
+      })),
+    ];
+    return events.sort((a, b) => new Date(a.date!).getTime() - new Date(b.date!).getTime());
   }
 }
 

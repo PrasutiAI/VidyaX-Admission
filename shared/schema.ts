@@ -249,6 +249,79 @@ export const insertApplicationStatusHistorySchema = createInsertSchema(applicati
 export type InsertApplicationStatusHistory = z.infer<typeof insertApplicationStatusHistorySchema>;
 export type ApplicationStatusHistory = typeof applicationStatusHistory.$inferSelect;
 
+// Application Communications/Notes
+export const applicationCommunicationTypeEnum = [
+  "call",
+  "email",
+  "meeting",
+  "sms",
+  "note",
+] as const;
+
+export type CommunicationType = (typeof applicationCommunicationTypeEnum)[number];
+
+export const applicationCommunications = pgTable("application_communications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => admissionApplications.id, { onDelete: "cascade" }),
+  type: text("type", { enum: applicationCommunicationTypeEnum }).notNull(),
+  subject: text("subject"),
+  content: text("content").notNull(),
+  contactPerson: text("contact_person"),
+  createdAt: timestamp("created_at").defaultNow(),
+  createdBy: text("created_by"),
+});
+
+export const applicationCommunicationsRelations = relations(applicationCommunications, ({ one }) => ({
+  application: one(admissionApplications, {
+    fields: [applicationCommunications.applicationId],
+    references: [admissionApplications.id],
+  }),
+}));
+
+export const insertApplicationCommunicationSchema = createInsertSchema(applicationCommunications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertApplicationCommunication = z.infer<typeof insertApplicationCommunicationSchema>;
+export type ApplicationCommunication = typeof applicationCommunications.$inferSelect;
+
+// Notifications
+export const notificationTypeEnum = [
+  "reminder",
+  "status_change",
+  "deadline",
+  "document",
+  "system",
+] as const;
+
+export type NotificationType = (typeof notificationTypeEnum)[number];
+
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type", { enum: notificationTypeEnum }).notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  applicationId: varchar("application_id").references(() => admissionApplications.id, { onDelete: "cascade" }),
+  isRead: text("is_read", { enum: ["true", "false"] }).notNull().default("false"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  application: one(admissionApplications, {
+    fields: [notifications.applicationId],
+    references: [admissionApplications.id],
+  }),
+}));
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
+
 // Seat Reservations
 export const seatReservations = pgTable("seat_reservations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
