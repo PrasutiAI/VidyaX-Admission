@@ -1016,6 +1016,50 @@ export async function registerRoutes(
     }
   });
 
+  // AI NLP Search (v2.6.0)
+  const nlpSearchSchema = z.object({
+    query: z.string().min(1),
+  });
+
+  app.post("/api/ai/nlp-search", async (req, res) => {
+    try {
+      const validation = validateBody(nlpSearchSchema, req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
+      const applications = await storage.getApplications();
+      const result = performNLPSearch(validation.data.query, applications);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Sentiment Analysis (v2.6.0)
+  app.get("/api/ai/sentiment-analysis/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplicationWithRelations(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      const sentiment = analyzeInterviewSentiment(application);
+      res.json(sentiment);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Smart Scheduling (v2.6.0)
+  app.get("/api/ai/smart-scheduling", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const scheduling = generateSmartScheduling(applications);
+      res.json(scheduling);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   return httpServer;
 }
 
@@ -3870,5 +3914,536 @@ function generateCapacityPlanning(applications: any[], seatConfigs: any[]): Capa
     grades,
     overallRecommendation,
     projectedEnrollment: totalProjectedEnrollment
+  };
+}
+
+// AI NLP Search (v2.6.0)
+interface NLPSearchResult {
+  query: string;
+  interpretation: string;
+  applications: {
+    id: string;
+    applicationNumber: string;
+    studentName: string;
+    grade: string;
+    status: string;
+    relevanceScore: number;
+    matchedFields: string[];
+  }[];
+  suggestions: string[];
+  totalMatches: number;
+}
+
+function performNLPSearch(query: string, applications: any[]): NLPSearchResult {
+  const lowerQuery = query.toLowerCase().trim();
+  const matchedApplications: NLPSearchResult["applications"] = [];
+  let interpretation = "";
+  const suggestions: string[] = [];
+
+  // Parse query intent
+  const statusKeywords: Record<string, string[]> = {
+    enrolled: ["enrolled", "admitted", "accepted students", "finalized"],
+    pending: ["pending", "waiting", "in progress", "processing"],
+    rejected: ["rejected", "declined", "not accepted", "failed"],
+    waitlisted: ["waitlist", "waiting list", "on hold"],
+    interview_completed: ["interviewed", "interview done", "interview completed"],
+    entrance_test_completed: ["tested", "test done", "exam completed"],
+    offer_extended: ["offered", "got offer", "offer sent"],
+    documents_pending: ["documents needed", "docs pending", "missing documents"],
+  };
+
+  const gradeKeywords: Record<string, string[]> = {
+    nursery: ["nursery", "pre-school", "playgroup"],
+    lkg: ["lkg", "lower kg", "junior kg"],
+    ukg: ["ukg", "upper kg", "senior kg"],
+    grade1: ["grade 1", "class 1", "first grade", "1st grade"],
+    grade2: ["grade 2", "class 2", "second grade", "2nd grade"],
+    grade3: ["grade 3", "class 3", "third grade", "3rd grade"],
+    grade4: ["grade 4", "class 4", "fourth grade", "4th grade"],
+    grade5: ["grade 5", "class 5", "fifth grade", "5th grade"],
+  };
+
+  // Detect status filter
+  let statusFilter: string | null = null;
+  for (const [status, keywords] of Object.entries(statusKeywords)) {
+    if (keywords.some(kw => lowerQuery.includes(kw))) {
+      statusFilter = status;
+      interpretation += `Status: ${status}. `;
+      break;
+    }
+  }
+
+  // Detect grade filter
+  let gradeFilter: string | null = null;
+  for (const [grade, keywords] of Object.entries(gradeKeywords)) {
+    if (keywords.some(kw => lowerQuery.includes(kw))) {
+      gradeFilter = grade;
+      interpretation += `Grade: ${grade}. `;
+      break;
+    }
+  }
+
+  // Detect name search
+  const namePatterns = [
+    /(?:find|search|show|get)\s+(?:student\s+)?(?:named?\s+)?(\w+)/i,
+    /(?:applications?\s+for)\s+(\w+)/i,
+    /(\w+)'s?\s+application/i,
+  ];
+
+  let nameSearch: string | null = null;
+  for (const pattern of namePatterns) {
+    const match = lowerQuery.match(pattern);
+    if (match && match[1] && match[1].length > 2) {
+      nameSearch = match[1].toLowerCase();
+      interpretation += `Name contains: "${nameSearch}". `;
+      break;
+    }
+  }
+
+  // Detect score-based queries
+  let scoreFilter: { type: "high" | "low" | null; threshold: number } = { type: null, threshold: 0 };
+  if (lowerQuery.includes("high score") || lowerQuery.includes("top performer")) {
+    scoreFilter = { type: "high", threshold: 70 };
+    interpretation += "High performers (score > 70%). ";
+  } else if (lowerQuery.includes("low score") || lowerQuery.includes("struggling")) {
+    scoreFilter = { type: "low", threshold: 40 };
+    interpretation += "Low performers (score < 40%). ";
+  }
+
+  // Filter and score applications
+  applications.forEach(app => {
+    let relevanceScore = 0;
+    const matchedFields: string[] = [];
+    const studentName = `${app.studentFirstName} ${app.studentLastName}`.toLowerCase();
+
+    // Status match
+    if (statusFilter && app.status === statusFilter) {
+      relevanceScore += 40;
+      matchedFields.push("status");
+    }
+
+    // Grade match
+    if (gradeFilter && app.gradeAppliedFor === gradeFilter) {
+      relevanceScore += 30;
+      matchedFields.push("grade");
+    }
+
+    // Name match
+    if (nameSearch && (studentName.includes(nameSearch) || 
+        app.applicationNumber.toLowerCase().includes(nameSearch))) {
+      relevanceScore += 50;
+      matchedFields.push("name");
+    }
+
+    // Score match
+    if (scoreFilter.type) {
+      const testScore = parseFloat(app.entranceTestScore || "0");
+      if (scoreFilter.type === "high" && testScore >= scoreFilter.threshold) {
+        relevanceScore += 30;
+        matchedFields.push("entranceTestScore");
+      } else if (scoreFilter.type === "low" && testScore > 0 && testScore < scoreFilter.threshold) {
+        relevanceScore += 30;
+        matchedFields.push("entranceTestScore");
+      }
+    }
+
+    // General text search fallback
+    if (relevanceScore === 0) {
+      const searchableText = `${studentName} ${app.applicationNumber} ${app.fatherName} ${app.motherName} ${app.gradeAppliedFor}`.toLowerCase();
+      const queryWords = lowerQuery.split(/\s+/).filter(w => w.length > 2);
+      queryWords.forEach(word => {
+        if (searchableText.includes(word)) {
+          relevanceScore += 15;
+          matchedFields.push("general");
+        }
+      });
+    }
+
+    if (relevanceScore > 0) {
+      matchedApplications.push({
+        id: app.id,
+        applicationNumber: app.applicationNumber,
+        studentName: `${app.studentFirstName} ${app.studentLastName}`,
+        grade: app.gradeAppliedFor,
+        status: app.status,
+        relevanceScore: Math.min(100, relevanceScore),
+        matchedFields: [...new Set(matchedFields)]
+      });
+    }
+  });
+
+  // Sort by relevance
+  matchedApplications.sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+  // Generate suggestions
+  if (matchedApplications.length === 0) {
+    suggestions.push("Try searching by student name, status, or grade");
+    suggestions.push("Example: 'show enrolled students in grade 5'");
+    suggestions.push("Example: 'find applications for John'");
+  } else if (matchedApplications.length > 10) {
+    suggestions.push("Try adding more filters to narrow results");
+  }
+
+  if (!interpretation) {
+    interpretation = "General search across all application fields.";
+  }
+
+  return {
+    query,
+    interpretation: interpretation.trim(),
+    applications: matchedApplications.slice(0, 20),
+    suggestions,
+    totalMatches: matchedApplications.length
+  };
+}
+
+// AI Sentiment Analysis (v2.6.0)
+interface SentimentAnalysis {
+  applicationId: string;
+  studentName: string;
+  overallSentiment: "positive" | "neutral" | "negative" | "mixed";
+  sentimentScore: number;
+  analysis: {
+    aspect: string;
+    sentiment: "positive" | "neutral" | "negative";
+    confidence: number;
+    excerpt: string;
+  }[];
+  insights: string[];
+  hasInterviewNotes: boolean;
+}
+
+function analyzeInterviewSentiment(application: any): SentimentAnalysis {
+  const studentName = `${application.studentFirstName} ${application.studentLastName}`;
+  const analysis: SentimentAnalysis["analysis"] = [];
+  const insights: string[] = [];
+  let sentimentScore = 50; // Neutral baseline
+
+  const interviewNotes = application.interviewNotes || "";
+  const hasInterviewNotes = interviewNotes.length > 0;
+
+  if (!hasInterviewNotes) {
+    return {
+      applicationId: application.id,
+      studentName,
+      overallSentiment: "neutral",
+      sentimentScore: 50,
+      analysis: [],
+      insights: ["No interview notes available for sentiment analysis"],
+      hasInterviewNotes: false
+    };
+  }
+
+  const lowerNotes = interviewNotes.toLowerCase();
+
+  // Positive indicators
+  const positiveWords = [
+    "excellent", "outstanding", "impressive", "confident", "articulate",
+    "enthusiastic", "bright", "capable", "polite", "respectful",
+    "engaged", "curious", "well-prepared", "mature", "focused",
+    "cooperative", "friendly", "positive", "strong", "good"
+  ];
+
+  // Negative indicators  
+  const negativeWords = [
+    "poor", "weak", "struggling", "nervous", "shy", "reluctant",
+    "unprepared", "distracted", "confused", "disinterested", "rude",
+    "immature", "unfocused", "uncooperative", "concern", "issue",
+    "problem", "difficult", "challenge", "lacking"
+  ];
+
+  // Neutral indicators
+  const neutralWords = [
+    "average", "moderate", "okay", "satisfactory", "acceptable",
+    "normal", "standard", "typical"
+  ];
+
+  // Analyze presence of sentiment words
+  let positiveCount = 0;
+  let negativeCount = 0;
+  let neutralCount = 0;
+
+  positiveWords.forEach(word => {
+    if (lowerNotes.includes(word)) {
+      positiveCount++;
+      const excerptMatch = interviewNotes.match(new RegExp(`.{0,30}${word}.{0,30}`, "i"));
+      if (excerptMatch && analysis.filter(a => a.aspect === "Communication").length < 3) {
+        analysis.push({
+          aspect: "Communication",
+          sentiment: "positive",
+          confidence: 85,
+          excerpt: excerptMatch[0].trim()
+        });
+      }
+    }
+  });
+
+  negativeWords.forEach(word => {
+    if (lowerNotes.includes(word)) {
+      negativeCount++;
+      const excerptMatch = interviewNotes.match(new RegExp(`.{0,30}${word}.{0,30}`, "i"));
+      if (excerptMatch && analysis.filter(a => a.aspect === "Concerns").length < 3) {
+        analysis.push({
+          aspect: "Concerns",
+          sentiment: "negative",
+          confidence: 80,
+          excerpt: excerptMatch[0].trim()
+        });
+      }
+    }
+  });
+
+  neutralWords.forEach(word => {
+    if (lowerNotes.includes(word)) {
+      neutralCount++;
+    }
+  });
+
+  // Calculate sentiment score
+  const totalWords = positiveCount + negativeCount + neutralCount;
+  if (totalWords > 0) {
+    sentimentScore = Math.round(
+      ((positiveCount * 100) + (neutralCount * 50) + (negativeCount * 0)) / totalWords
+    );
+  }
+
+  // Analyze academic indicators
+  if (lowerNotes.includes("academically strong") || lowerNotes.includes("good grades") || 
+      lowerNotes.includes("excellent student")) {
+    analysis.push({
+      aspect: "Academic Potential",
+      sentiment: "positive",
+      confidence: 90,
+      excerpt: "Shows strong academic potential"
+    });
+    sentimentScore += 10;
+  }
+
+  // Analyze parent engagement
+  if (lowerNotes.includes("parent") || lowerNotes.includes("family")) {
+    if (lowerNotes.includes("supportive") || lowerNotes.includes("involved") || 
+        lowerNotes.includes("engaged parents")) {
+      analysis.push({
+        aspect: "Family Support",
+        sentiment: "positive",
+        confidence: 85,
+        excerpt: "Strong family engagement indicated"
+      });
+      sentimentScore += 5;
+    }
+  }
+
+  // Determine overall sentiment
+  let overallSentiment: SentimentAnalysis["overallSentiment"];
+  if (sentimentScore >= 70) {
+    overallSentiment = "positive";
+    insights.push("Interview notes indicate a positive impression of the candidate");
+  } else if (sentimentScore <= 30) {
+    overallSentiment = "negative";
+    insights.push("Interview notes suggest concerns about the candidate");
+  } else if (positiveCount > 0 && negativeCount > 0) {
+    overallSentiment = "mixed";
+    insights.push("Interview notes show both positive and negative aspects");
+  } else {
+    overallSentiment = "neutral";
+    insights.push("Interview notes are mostly neutral in tone");
+  }
+
+  // Add score-based insights
+  if (application.interviewScore) {
+    const score = parseFloat(application.interviewScore);
+    if (score >= 70 && overallSentiment === "positive") {
+      insights.push("High interview score aligns with positive notes - strong candidate");
+    } else if (score < 50 && overallSentiment === "negative") {
+      insights.push("Low score reflects concerns noted in interview");
+    } else if (score >= 70 && overallSentiment === "negative") {
+      insights.push("Discrepancy: high score but negative notes - review recommended");
+    }
+  }
+
+  return {
+    applicationId: application.id,
+    studentName,
+    overallSentiment,
+    sentimentScore: Math.min(100, Math.max(0, sentimentScore)),
+    analysis: analysis.slice(0, 5),
+    insights,
+    hasInterviewNotes: true
+  };
+}
+
+// AI Smart Scheduling (v2.6.0)
+interface SmartScheduling {
+  recommendations: {
+    applicationId: string;
+    applicationNumber: string;
+    studentName: string;
+    eventType: "entrance_test" | "interview";
+    suggestedDate: string;
+    suggestedTime: string;
+    reasoning: string;
+    priority: "high" | "medium" | "low";
+  }[];
+  optimalSlots: {
+    date: string;
+    timeSlots: string[];
+    capacity: number;
+    available: number;
+  }[];
+  insights: string[];
+  pendingCount: {
+    entranceTests: number;
+    interviews: number;
+  };
+}
+
+function generateSmartScheduling(applications: any[]): SmartScheduling {
+  const recommendations: SmartScheduling["recommendations"] = [];
+  const insights: string[] = [];
+
+  // Find applications needing scheduling
+  const needsTest = applications.filter(a => a.status === "documents_verified");
+  const needsInterview = applications.filter(a => a.status === "entrance_test_completed");
+
+  // Generate next 7 days for scheduling
+  const optimalSlots: SmartScheduling["optimalSlots"] = [];
+  const today = new Date();
+  
+  for (let i = 1; i <= 7; i++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() + i);
+    
+    // Skip weekends
+    if (date.getDay() === 0 || date.getDay() === 6) continue;
+    
+    const dateStr = date.toISOString().split("T")[0];
+    
+    // Check how many events already scheduled for this date
+    const scheduledTests = applications.filter(a => 
+      a.entranceTestDate === dateStr && a.status === "entrance_test_scheduled"
+    ).length;
+    
+    const scheduledInterviews = applications.filter(a => 
+      a.interviewDate === dateStr && a.status === "interview_scheduled"
+    ).length;
+    
+    const capacity = 10; // Max events per day
+    const used = scheduledTests + scheduledInterviews;
+    
+    optimalSlots.push({
+      date: dateStr,
+      timeSlots: ["09:00 AM", "10:00 AM", "11:00 AM", "02:00 PM", "03:00 PM", "04:00 PM"],
+      capacity,
+      available: Math.max(0, capacity - used)
+    });
+  }
+
+  // Sort optimal slots by availability
+  const bestSlots = optimalSlots.filter(s => s.available > 0).sort((a, b) => b.available - a.available);
+
+  // Generate recommendations for entrance tests
+  needsTest.forEach((app, index) => {
+    const appDate = new Date(app.applicationDate);
+    const daysSinceApp = Math.floor((Date.now() - appDate.getTime()) / (1000 * 60 * 60 * 24));
+    
+    let priority: "high" | "medium" | "low" = "medium";
+    let reasoning = "Ready for entrance test scheduling";
+    
+    if (daysSinceApp > 14) {
+      priority = "high";
+      reasoning = `Application pending ${daysSinceApp} days - prioritize scheduling`;
+    } else if (daysSinceApp > 7) {
+      priority = "medium";
+      reasoning = "Documents verified, schedule within this week";
+    } else {
+      priority = "low";
+      reasoning = "Recently verified, can schedule at convenience";
+    }
+
+    const slotIndex = Math.min(index, bestSlots.length - 1);
+    const suggestedSlot = bestSlots[slotIndex] || optimalSlots[0];
+    
+    if (suggestedSlot) {
+      recommendations.push({
+        applicationId: app.id,
+        applicationNumber: app.applicationNumber,
+        studentName: `${app.studentFirstName} ${app.studentLastName}`,
+        eventType: "entrance_test",
+        suggestedDate: suggestedSlot.date,
+        suggestedTime: suggestedSlot.timeSlots[index % suggestedSlot.timeSlots.length],
+        reasoning,
+        priority
+      });
+    }
+  });
+
+  // Generate recommendations for interviews
+  needsInterview.forEach((app, index) => {
+    const testScore = parseFloat(app.entranceTestScore || "0");
+    
+    let priority: "high" | "medium" | "low" = "medium";
+    let reasoning = "Test completed, ready for interview";
+    
+    if (testScore >= 70) {
+      priority = "high";
+      reasoning = `High test score (${testScore}%) - prioritize interview scheduling`;
+    } else if (testScore >= 50) {
+      priority = "medium";
+      reasoning = `Good test score (${testScore}%) - schedule interview soon`;
+    } else {
+      priority = "low";
+      reasoning = `Test score (${testScore}%) - schedule when slots available`;
+    }
+
+    const slotIndex = Math.min(index + needsTest.length, bestSlots.length - 1);
+    const suggestedSlot = bestSlots[slotIndex] || optimalSlots[1] || optimalSlots[0];
+    
+    if (suggestedSlot) {
+      recommendations.push({
+        applicationId: app.id,
+        applicationNumber: app.applicationNumber,
+        studentName: `${app.studentFirstName} ${app.studentLastName}`,
+        eventType: "interview",
+        suggestedDate: suggestedSlot.date,
+        suggestedTime: suggestedSlot.timeSlots[(index + 3) % suggestedSlot.timeSlots.length],
+        reasoning,
+        priority
+      });
+    }
+  });
+
+  // Sort by priority
+  recommendations.sort((a, b) => {
+    const priorityOrder = { high: 0, medium: 1, low: 2 };
+    return priorityOrder[a.priority] - priorityOrder[b.priority];
+  });
+
+  // Generate insights
+  if (needsTest.length > 5) {
+    insights.push(`${needsTest.length} applications awaiting entrance tests - consider batch scheduling`);
+  }
+  if (needsInterview.length > 3) {
+    insights.push(`${needsInterview.length} students ready for interviews - allocate interview panel`);
+  }
+  if (bestSlots.length === 0) {
+    insights.push("All upcoming slots fully booked - consider extending hours or adding days");
+  } else {
+    const totalAvailable = bestSlots.reduce((sum, s) => sum + s.available, 0);
+    insights.push(`${totalAvailable} slots available across ${bestSlots.length} days`);
+  }
+
+  const highPriorityCount = recommendations.filter(r => r.priority === "high").length;
+  if (highPriorityCount > 0) {
+    insights.push(`${highPriorityCount} high-priority scheduling items need immediate attention`);
+  }
+
+  return {
+    recommendations: recommendations.slice(0, 20),
+    optimalSlots,
+    insights,
+    pendingCount: {
+      entranceTests: needsTest.length,
+      interviews: needsInterview.length
+    }
   };
 }
