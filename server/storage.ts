@@ -501,7 +501,8 @@ export class DatabaseStorage implements IStorage {
       .where(eq(admissionApplications.status, "enrolled"))
       .orderBy(desc(admissionApplications.updatedAt));
 
-    const byGrade = await db.select({
+    // Get enrolled count per grade
+    const enrolledByGrade = await db.select({
       grade: admissionApplications.gradeAppliedFor,
       count: sql<number>`count(*)`,
     })
@@ -509,10 +510,26 @@ export class DatabaseStorage implements IStorage {
       .where(eq(admissionApplications.status, "enrolled"))
       .groupBy(admissionApplications.gradeAppliedFor);
 
+    // Get total applications per grade (all statuses)
+    const totalByGrade = await db.select({
+      grade: admissionApplications.gradeAppliedFor,
+      count: sql<number>`count(*)`,
+    })
+      .from(admissionApplications)
+      .groupBy(admissionApplications.gradeAppliedFor);
+
+    // Merge enrolled and total counts per grade
+    const totalMap = new Map(totalByGrade.map(g => [g.grade, Number(g.count)]));
+    const byGrade = totalByGrade.map(g => ({
+      grade: g.grade,
+      enrolled: enrolledByGrade.find(e => e.grade === g.grade)?.count || 0,
+      total: Number(g.count),
+    }));
+
     return {
       totalEnrolled: enrolled.length,
       enrolledStudents: enrolled,
-      byGrade: byGrade.map(g => ({ grade: g.grade, count: Number(g.count) })),
+      byGrade: byGrade.map(g => ({ grade: g.grade, enrolled: Number(g.enrolled), total: g.total })),
     };
   }
 

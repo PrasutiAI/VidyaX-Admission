@@ -18,15 +18,14 @@ import {
 import { FileCheck, FileX, FileClock, Users, TrendingUp } from "lucide-react";
 
 interface ApplicationSummary {
-  totalApplications: number;
-  byStatus: Record<string, number>;
-  byGrade: Record<string, number>;
+  byStatus: { status: string; count: number }[];
+  byGrade: { grade: string; count: number }[];
 }
 
 interface EnrollmentReport {
   totalEnrolled: number;
-  enrollmentRate: number;
-  byGrade: Record<string, { enrolled: number; total: number }>;
+  enrolledStudents: any[];
+  byGrade: { grade: string; enrolled: number; total: number }[];
 }
 
 interface DocumentVerificationReport {
@@ -75,28 +74,30 @@ export default function Reports() {
     queryKey: ["/api/reports/document-verification"],
   });
 
+  const totalApplications = applicationSummary?.byStatus?.reduce((sum, s) => sum + s.count, 0) || 0;
+  
   const statusChartData = applicationSummary?.byStatus
-    ? Object.entries(applicationSummary.byStatus).map(([status, count]) => ({
-        name: status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-        value: count,
-        fill: STATUS_COLORS[status] || "hsl(0, 0%, 60%)",
+    ? applicationSummary.byStatus.map((item) => ({
+        name: item.status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        value: item.count,
+        fill: STATUS_COLORS[item.status] || "hsl(0, 0%, 60%)",
       }))
     : [];
 
   const gradeChartData = applicationSummary?.byGrade
-    ? Object.entries(applicationSummary.byGrade).map(([grade, count], index) => ({
-        name: grade,
-        applications: count,
+    ? applicationSummary.byGrade.map((item, index) => ({
+        name: item.grade,
+        applications: item.count,
         fill: GRADE_COLORS[index % GRADE_COLORS.length],
       }))
     : [];
 
   const enrollmentChartData = enrollmentReport?.byGrade
-    ? Object.entries(enrollmentReport.byGrade).map(([grade, data], index) => ({
-        name: grade,
-        enrolled: data.enrolled,
-        total: data.total,
-        rate: data.total > 0 ? Math.round((data.enrolled / data.total) * 100) : 0,
+    ? enrollmentReport.byGrade.map((item, index) => ({
+        name: item.grade,
+        enrolled: item.enrolled,
+        total: item.total,
+        rate: item.total > 0 ? Math.round((item.enrolled / item.total) * 100) : 0,
         fill: GRADE_COLORS[index % GRADE_COLORS.length],
       }))
     : [];
@@ -131,7 +132,7 @@ export default function Reports() {
               <Skeleton className="h-8 w-20" />
             ) : (
               <div className="text-3xl font-semibold" data-testid="text-total-applications">
-                {applicationSummary?.totalApplications || 0}
+                {totalApplications}
               </div>
             )}
           </CardContent>
@@ -167,7 +168,7 @@ export default function Reports() {
               <Skeleton className="h-8 w-20" />
             ) : (
               <div className="text-3xl font-semibold" data-testid="text-enrollment-rate">
-                {enrollmentReport?.enrollmentRate || 0}%
+                {totalApplications > 0 ? Math.round(((enrollmentReport?.totalEnrolled || 0) / totalApplications) * 100) : 0}%
               </div>
             )}
           </CardContent>
