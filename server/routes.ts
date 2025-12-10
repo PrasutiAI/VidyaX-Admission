@@ -2239,18 +2239,21 @@ function generateCommunicationTemplates(application: any): { templates: Communic
       break;
 
     case "interview_scheduled":
+      const interviewDateStr = application.interviewDate 
+        ? new Date(application.interviewDate).toLocaleDateString() 
+        : "TBC";
       templates.push({
         type: "email",
         purpose: "Interview Reminder",
         subject: `Interview Scheduled - ${application.applicationNumber}`,
-        content: `Dear ${guardianName},\n\nThe interview for ${studentName}'s admission has been scheduled.\n\nPlease ensure both parent/guardian and student are present.\n\nInterview Date: ${application.interviewDate || "To be confirmed"}\n\nRegards,\nAdmission Office`,
+        content: `Dear ${guardianName},\n\nThe interview for ${studentName}'s admission has been scheduled.\n\nPlease ensure both parent/guardian and student are present.\n\nInterview Date: ${interviewDateStr}\n\nRegards,\nAdmission Office`,
         priority: "high"
       });
       templates.push({
         type: "sms",
         purpose: "Interview SMS Reminder",
-        subject: "Interview Reminder",
-        content: `Reminder: ${studentName}'s interview for admission is scheduled. Please check your email for details. - Admission Office`,
+        subject: "Interview",
+        content: `Interview: ${interviewDateStr}. ${application.applicationNumber}`,
         priority: "medium"
       });
       break;
@@ -2321,16 +2324,46 @@ interface ApplicationComparison {
 function compareApplications(applications: any[]): ApplicationComparison {
   const comparedApps = applications.map(app => {
     const documents = app.documents || [];
+    const totalDocs = documents.length;
     const verifiedDocs = documents.filter((d: any) => d.verificationStatus === "verified").length;
-    const docCompleteness = Math.round((verifiedDocs / 5) * 100);
+    const rejectedDocs = documents.filter((d: any) => d.verificationStatus === "rejected").length;
+    const docCompleteness = totalDocs > 0 ? Math.round((verifiedDocs / totalDocs) * 100) : 0;
     
     const entranceTest = app.entranceTestScore ? parseFloat(app.entranceTestScore) : null;
     const interview = app.interviewScore ? parseFloat(app.interviewScore) : null;
+    const previousMarks = app.previousMarks ? parseFloat(app.previousMarks) : null;
     
-    let eligibility = 30 + docCompleteness * 0.2;
-    if (entranceTest) eligibility += entranceTest * 0.3;
-    if (interview) eligibility += interview * 0.2;
-    if (app.previousMarks) eligibility += parseFloat(app.previousMarks) * 0.1;
+    let eligibility = 20;
+    
+    if (totalDocs >= 3 && rejectedDocs === 0) eligibility += 15;
+    else if (verifiedDocs >= 2) eligibility += 10;
+    else if (verifiedDocs >= 1) eligibility += 5;
+    
+    if (entranceTest !== null) {
+      if (entranceTest >= 70) eligibility += 25;
+      else if (entranceTest >= 50) eligibility += 20;
+      else if (entranceTest >= 40) eligibility += 15;
+      else eligibility += 5;
+    }
+    
+    if (interview !== null) {
+      if (interview >= 70) eligibility += 20;
+      else if (interview >= 50) eligibility += 15;
+      else if (interview >= 40) eligibility += 10;
+      else eligibility += 3;
+    }
+    
+    if (previousMarks !== null) {
+      if (previousMarks >= 80) eligibility += 15;
+      else if (previousMarks >= 60) eligibility += 10;
+      else if (previousMarks >= 40) eligibility += 5;
+    }
+    
+    const statusBonus: Record<string, number> = {
+      enrolled: 5, offer_accepted: 4, offer_extended: 3, 
+      interview_completed: 2, entrance_test_completed: 1
+    };
+    eligibility += statusBonus[app.status] || 0;
     
     return {
       id: app.id,
