@@ -1060,6 +1060,50 @@ export async function registerRoutes(
     }
   });
 
+  // AI Workflow Optimization (v2.7.0)
+  app.get("/api/ai/workflow-optimization", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const optimization = generateWorkflowOptimization(applications);
+      res.json(optimization);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Cohort Analysis (v2.7.0)
+  app.get("/api/ai/cohort-analysis", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const cohortAnalysis = generateCohortAnalysis(applications);
+      res.json(cohortAnalysis);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Sibling Detection (v2.7.0)
+  app.get("/api/ai/sibling-detection", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const siblings = detectSiblingApplications(applications);
+      res.json(siblings);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Conversion Funnel (v2.7.0)
+  app.get("/api/ai/conversion-funnel", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const funnel = generateConversionFunnel(applications);
+      res.json(funnel);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   return httpServer;
 }
 
@@ -4445,5 +4489,426 @@ function generateSmartScheduling(applications: any[]): SmartScheduling {
       entranceTests: needsTest.length,
       interviews: needsInterview.length
     }
+  };
+}
+
+// AI Workflow Optimization (v2.7.0)
+function generateWorkflowOptimization(applications: any[]): any {
+  const bottlenecks: {
+    stage: string;
+    count: number;
+    avgDaysStuck: number;
+    severity: "critical" | "warning" | "normal";
+    recommendation: string;
+  }[] = [];
+
+  const improvements: string[] = [];
+  
+  const statusGroups: Record<string, any[]> = {};
+  applications.forEach(app => {
+    if (!statusGroups[app.status]) {
+      statusGroups[app.status] = [];
+    }
+    statusGroups[app.status].push(app);
+  });
+
+  const stageOrder = [
+    "inquiry", "application_submitted", "documents_pending", "documents_verified",
+    "entrance_test_scheduled", "entrance_test_completed", "interview_scheduled",
+    "interview_completed", "under_review", "waitlisted", "offer_extended",
+    "offer_accepted", "enrolled", "rejected", "withdrawn"
+  ];
+
+  stageOrder.forEach(stage => {
+    const apps = statusGroups[stage] || [];
+    if (apps.length === 0) return;
+
+    const now = Date.now();
+    const totalDays = apps.reduce((sum: number, app: any) => {
+      const date = new Date(app.updatedAt || app.applicationDate);
+      return sum + Math.floor((now - date.getTime()) / (1000 * 60 * 60 * 24));
+    }, 0);
+    const avgDays = Math.round(totalDays / apps.length);
+
+    let severity: "critical" | "warning" | "normal" = "normal";
+    let recommendation = "Stage operating normally";
+
+    if (stage === "documents_pending" && avgDays > 7) {
+      severity = avgDays > 14 ? "critical" : "warning";
+      recommendation = "Send document reminders to applicants";
+    } else if (stage === "documents_verified" && avgDays > 5) {
+      severity = avgDays > 10 ? "critical" : "warning";
+      recommendation = "Schedule entrance tests to reduce backlog";
+    } else if (stage === "entrance_test_completed" && avgDays > 5) {
+      severity = avgDays > 10 ? "critical" : "warning";
+      recommendation = "Prioritize interview scheduling";
+    } else if (stage === "interview_completed" && avgDays > 3) {
+      severity = avgDays > 7 ? "critical" : "warning";
+      recommendation = "Complete review and make admission decisions";
+    } else if (stage === "offer_extended" && avgDays > 7) {
+      severity = avgDays > 14 ? "critical" : "warning";
+      recommendation = "Follow up with applicants on offer acceptance";
+    } else if (stage === "offer_accepted" && avgDays > 3) {
+      severity = avgDays > 7 ? "critical" : "warning";
+      recommendation = "Complete enrollment process promptly";
+    }
+
+    if (severity !== "normal" || apps.length > 10) {
+      bottlenecks.push({
+        stage,
+        count: apps.length,
+        avgDaysStuck: avgDays,
+        severity,
+        recommendation
+      });
+    }
+  });
+
+  bottlenecks.sort((a, b) => {
+    const severityOrder = { critical: 0, warning: 1, normal: 2 };
+    return severityOrder[a.severity] - severityOrder[b.severity];
+  });
+
+  const pendingDocs = statusGroups["documents_pending"]?.length || 0;
+  if (pendingDocs > 10) {
+    improvements.push(`Batch process ${pendingDocs} pending document verifications`);
+  }
+
+  const pendingTests = (statusGroups["documents_verified"]?.length || 0);
+  if (pendingTests > 5) {
+    improvements.push(`Schedule batch entrance tests for ${pendingTests} candidates`);
+  }
+
+  const pendingInterviews = (statusGroups["entrance_test_completed"]?.length || 0);
+  if (pendingInterviews > 3) {
+    improvements.push(`Organize panel interviews for ${pendingInterviews} candidates`);
+  }
+
+  const totalActive = applications.filter(a => 
+    !["enrolled", "rejected", "withdrawn"].includes(a.status)
+  ).length;
+  
+  const enrolled = applications.filter(a => a.status === "enrolled").length;
+  const efficiencyScore = applications.length > 0 
+    ? Math.round((enrolled / applications.length) * 100 + (100 - totalActive) / 2)
+    : 100;
+
+  const criticalCount = bottlenecks.filter(b => b.severity === "critical").length;
+  const estimatedTimeSavings = criticalCount > 0 
+    ? `${criticalCount * 2}-${criticalCount * 5} hours per week`
+    : "System running efficiently";
+
+  return {
+    bottlenecks: bottlenecks.slice(0, 10),
+    efficiencyScore: Math.min(100, Math.max(0, efficiencyScore)),
+    improvements,
+    estimatedTimeSavings
+  };
+}
+
+// AI Cohort Analysis (v2.7.0)
+function generateCohortAnalysis(applications: any[]): any {
+  const cohorts: {
+    name: string;
+    criteria: string;
+    count: number;
+    avgScore: number;
+    conversionRate: number;
+    insights: string[];
+  }[] = [];
+
+  const patterns: string[] = [];
+  const recommendations: string[] = [];
+
+  const byGrade: Record<string, any[]> = {};
+  const byGender: Record<string, any[]> = {};
+  const byMonth: Record<string, any[]> = {};
+
+  applications.forEach(app => {
+    if (!byGrade[app.gradeAppliedFor]) byGrade[app.gradeAppliedFor] = [];
+    byGrade[app.gradeAppliedFor].push(app);
+
+    if (!byGender[app.gender]) byGender[app.gender] = [];
+    byGender[app.gender].push(app);
+
+    const month = new Date(app.applicationDate).toLocaleString('default', { month: 'long' });
+    if (!byMonth[month]) byMonth[month] = [];
+    byMonth[month].push(app);
+  });
+
+  Object.entries(byGrade).forEach(([grade, apps]) => {
+    const enrolled = apps.filter((a: any) => a.status === "enrolled").length;
+    const withScores = apps.filter((a: any) => a.entranceTestScore);
+    const avgScore = withScores.length > 0
+      ? Math.round(withScores.reduce((sum: number, a: any) => 
+          sum + parseFloat(a.entranceTestScore || "0"), 0) / withScores.length)
+      : 0;
+    const conversionRate = apps.length > 0 ? Math.round((enrolled / apps.length) * 100) : 0;
+
+    const insights: string[] = [];
+    if (conversionRate > 60) insights.push("High conversion rate - popular grade");
+    if (conversionRate < 30 && apps.length > 5) insights.push("Low conversion - investigate reasons");
+    if (avgScore > 70) insights.push("Strong academic cohort");
+    if (avgScore < 50 && avgScore > 0) insights.push("Consider additional support programs");
+
+    cohorts.push({
+      name: `Grade: ${grade}`,
+      criteria: `Applications for ${grade}`,
+      count: apps.length,
+      avgScore,
+      conversionRate,
+      insights
+    });
+  });
+
+  Object.entries(byGender).forEach(([gender, apps]) => {
+    const enrolled = apps.filter((a: any) => a.status === "enrolled").length;
+    const withScores = apps.filter((a: any) => a.entranceTestScore);
+    const avgScore = withScores.length > 0
+      ? Math.round(withScores.reduce((sum: number, a: any) => 
+          sum + parseFloat(a.entranceTestScore || "0"), 0) / withScores.length)
+      : 0;
+    const conversionRate = apps.length > 0 ? Math.round((enrolled / apps.length) * 100) : 0;
+
+    cohorts.push({
+      name: `Gender: ${gender.charAt(0).toUpperCase() + gender.slice(1)}`,
+      criteria: `${gender} applicants`,
+      count: apps.length,
+      avgScore,
+      conversionRate,
+      insights: []
+    });
+  });
+
+  const topGrade = Object.entries(byGrade)
+    .sort((a, b) => b[1].length - a[1].length)[0];
+  if (topGrade) {
+    patterns.push(`${topGrade[0]} is the most popular grade with ${topGrade[1].length} applications`);
+  }
+
+  const genderCounts = Object.entries(byGender).map(([g, apps]) => ({ gender: g, count: apps.length }));
+  if (genderCounts.length >= 2) {
+    const sorted = genderCounts.sort((a, b) => b.count - a.count);
+    const ratio = ((sorted[0].count / (sorted[0].count + sorted[1].count)) * 100).toFixed(0);
+    patterns.push(`Gender distribution: ${sorted[0].gender} ${ratio}%, ${sorted[1].gender} ${100 - parseInt(ratio)}%`);
+  }
+
+  const lowConversionGrades = cohorts
+    .filter(c => c.name.startsWith("Grade:") && c.conversionRate < 40 && c.count > 3)
+    .map(c => c.name.replace("Grade: ", ""));
+  
+  if (lowConversionGrades.length > 0) {
+    recommendations.push(`Investigate low conversion in: ${lowConversionGrades.join(", ")}`);
+  }
+
+  const highDemandGrades = cohorts
+    .filter(c => c.name.startsWith("Grade:") && c.count > 10)
+    .map(c => c.name.replace("Grade: ", ""));
+  
+  if (highDemandGrades.length > 0) {
+    recommendations.push(`High demand grades (${highDemandGrades.join(", ")}) - ensure adequate capacity`);
+  }
+
+  return {
+    cohorts: cohorts.sort((a, b) => b.count - a.count).slice(0, 15),
+    patterns,
+    recommendations
+  };
+}
+
+// AI Sibling Detection (v2.7.0)
+function detectSiblingApplications(applications: any[]): any {
+  const siblingGroups: {
+    familyId: string;
+    applications: {
+      applicationId: string;
+      studentName: string;
+      grade: string;
+      status: string;
+    }[];
+    recommendedAction: string;
+  }[] = [];
+
+  const familyMap: Record<string, any[]> = {};
+  
+  applications.forEach(app => {
+    const familyKey = `${app.fatherName?.toLowerCase().trim()}_${app.motherName?.toLowerCase().trim()}_${app.fatherContact}`;
+    if (!familyMap[familyKey]) {
+      familyMap[familyKey] = [];
+    }
+    familyMap[familyKey].push(app);
+  });
+
+  let familyIdCounter = 1;
+  let totalSiblingApplications = 0;
+  let potentialDiscounts = 0;
+
+  Object.values(familyMap).forEach(apps => {
+    if (apps.length < 2) return;
+
+    const familyId = `FAM-${String(familyIdCounter++).padStart(4, "0")}`;
+    totalSiblingApplications += apps.length;
+
+    const applicationDetails = apps.map(app => ({
+      applicationId: app.id,
+      studentName: `${app.studentFirstName} ${app.studentLastName}`,
+      grade: app.gradeAppliedFor,
+      status: app.status
+    }));
+
+    let recommendedAction = "Review applications together for consistent treatment";
+    
+    const enrolledCount = apps.filter(a => a.status === "enrolled").length;
+    const pendingCount = apps.filter(a => 
+      !["enrolled", "rejected", "withdrawn"].includes(a.status)
+    ).length;
+
+    if (enrolledCount > 0 && pendingCount > 0) {
+      recommendedAction = "Prioritize sibling applications - existing enrolled student in family";
+      potentialDiscounts += pendingCount;
+    } else if (apps.every(a => a.status === "offer_extended" || a.status === "offer_accepted")) {
+      recommendedAction = "Consider sibling discount for multiple enrollments";
+      potentialDiscounts += apps.length;
+    } else if (apps.some(a => a.status === "rejected")) {
+      recommendedAction = "Note: One sibling was rejected - handle other applications sensitively";
+    }
+
+    siblingGroups.push({
+      familyId,
+      applications: applicationDetails,
+      recommendedAction
+    });
+  });
+
+  return {
+    siblingGroups: siblingGroups.slice(0, 20),
+    totalSiblingApplications,
+    potentialDiscounts,
+    insights: [
+      siblingGroups.length > 0 
+        ? `${siblingGroups.length} families with multiple applications detected`
+        : "No sibling applications detected",
+      potentialDiscounts > 0 
+        ? `${potentialDiscounts} applications eligible for sibling discount consideration`
+        : ""
+    ].filter(Boolean)
+  };
+}
+
+// AI Conversion Funnel (v2.7.0)
+function generateConversionFunnel(applications: any[]): any {
+  const stages = [
+    { stage: "Application Submitted", statuses: ["inquiry", "application_submitted"] },
+    { stage: "Documents Verified", statuses: ["documents_pending", "documents_verified"] },
+    { stage: "Test Completed", statuses: ["entrance_test_scheduled", "entrance_test_completed"] },
+    { stage: "Interview Done", statuses: ["interview_scheduled", "interview_completed"] },
+    { stage: "Under Review", statuses: ["under_review", "waitlisted"] },
+    { stage: "Offer Made", statuses: ["offer_extended"] },
+    { stage: "Offer Accepted", statuses: ["offer_accepted"] },
+    { stage: "Enrolled", statuses: ["enrolled"] }
+  ];
+
+  const total = applications.length;
+  if (total === 0) {
+    return {
+      stages: stages.map(s => ({ stage: s.stage, count: 0, percentage: 0, dropoffRate: 0 })),
+      overallConversionRate: 0,
+      bottleneckStage: "N/A",
+      recommendations: ["No applications to analyze"]
+    };
+  }
+
+  const statusOrder: Record<string, number> = {
+    "inquiry": 1,
+    "application_submitted": 2,
+    "documents_pending": 3,
+    "documents_verified": 4,
+    "entrance_test_scheduled": 5,
+    "entrance_test_completed": 6,
+    "interview_scheduled": 7,
+    "interview_completed": 8,
+    "under_review": 9,
+    "waitlisted": 9,
+    "offer_extended": 10,
+    "offer_accepted": 11,
+    "enrolled": 12,
+    "rejected": 0,
+    "withdrawn": 0
+  };
+
+  const funnelStages: {
+    stage: string;
+    count: number;
+    percentage: number;
+    dropoffRate: number;
+  }[] = [];
+
+  let previousCount = total;
+  let maxDropoff = 0;
+  let bottleneckStage = "";
+
+  stages.forEach((stageInfo, index) => {
+    const reachedOrBeyond = applications.filter(app => {
+      if (app.status === "rejected" || app.status === "withdrawn") return false;
+      const appStageOrder = statusOrder[app.status] || 0;
+      const minStageOrder = Math.min(...stageInfo.statuses.map(s => statusOrder[s] || 0));
+      return appStageOrder >= minStageOrder;
+    }).length;
+
+    const percentage = Math.round((reachedOrBeyond / total) * 100);
+    const dropoffRate = previousCount > 0 
+      ? Math.round(((previousCount - reachedOrBeyond) / previousCount) * 100)
+      : 0;
+
+    if (dropoffRate > maxDropoff && index > 0) {
+      maxDropoff = dropoffRate;
+      bottleneckStage = stageInfo.stage;
+    }
+
+    funnelStages.push({
+      stage: stageInfo.stage,
+      count: reachedOrBeyond,
+      percentage,
+      dropoffRate
+    });
+
+    previousCount = reachedOrBeyond;
+  });
+
+  const enrolled = applications.filter(a => a.status === "enrolled").length;
+  const overallConversionRate = Math.round((enrolled / total) * 100);
+
+  const recommendations: string[] = [];
+  
+  if (bottleneckStage) {
+    recommendations.push(`Focus on improving ${bottleneckStage} stage - highest drop-off point`);
+  }
+
+  const docStage = funnelStages.find(s => s.stage === "Documents Verified");
+  if (docStage && docStage.dropoffRate > 30) {
+    recommendations.push("Simplify document requirements or provide better guidance");
+  }
+
+  const testStage = funnelStages.find(s => s.stage === "Test Completed");
+  if (testStage && testStage.dropoffRate > 40) {
+    recommendations.push("Review entrance test difficulty or scheduling flexibility");
+  }
+
+  const offerStage = funnelStages.find(s => s.stage === "Offer Accepted");
+  if (offerStage && offerStage.dropoffRate > 30) {
+    recommendations.push("Improve offer attractiveness or follow-up communication");
+  }
+
+  if (overallConversionRate < 30) {
+    recommendations.push("Overall conversion rate is low - analyze drop-off reasons at each stage");
+  } else if (overallConversionRate > 70) {
+    recommendations.push("Excellent conversion rate - consider expanding capacity");
+  }
+
+  return {
+    stages: funnelStages,
+    overallConversionRate,
+    bottleneckStage: bottleneckStage || "None identified",
+    recommendations
   };
 }

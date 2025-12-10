@@ -1054,3 +1054,533 @@ export function AICapacityPlanning() {
     </Card>
   );
 }
+
+// Workflow Optimization Component (v2.7.0)
+interface WorkflowOptimizationData {
+  bottlenecks: {
+    stage: string;
+    count: number;
+    avgDaysStuck: number;
+    severity: "critical" | "warning" | "normal";
+    recommendation: string;
+  }[];
+  efficiencyScore: number;
+  improvements: string[];
+  estimatedTimeSavings: string;
+}
+
+const severityColors = {
+  critical: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  warning: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
+  normal: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300",
+};
+
+export function AIWorkflowOptimization() {
+  const { data, isLoading, isError, refetch } = useQuery<WorkflowOptimizationData>({
+    queryKey: ["/api/ai/workflow-optimization"],
+  });
+
+  if (isLoading) {
+    return (
+      <Card className="border-card-border">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <CardTitle className="text-lg font-medium">Workflow Optimization</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-32 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card className="border-card-border border-destructive/50">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-destructive" />
+            <CardTitle className="text-lg font-medium">Workflow Optimization</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="button-retry-workflow">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return (
+    <Card className="border-card-border">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <Zap className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg font-medium">Workflow Optimization</CardTitle>
+          </div>
+          <Badge variant="outline">
+            Efficiency: {data.efficiencyScore}%
+          </Badge>
+        </div>
+        <CardDescription>Time savings: {data.estimatedTimeSavings}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {data.bottlenecks.length > 0 && (
+          <div className="space-y-3">
+            <span className="text-sm font-medium text-muted-foreground">Bottlenecks Detected</span>
+            {data.bottlenecks.slice(0, 5).map((bottleneck, index) => (
+              <div key={index} className="p-3 rounded-lg border space-y-2" data-testid={`bottleneck-${index}`}>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="font-medium text-sm capitalize">{bottleneck.stage.replace(/_/g, " ")}</span>
+                  <Badge variant="outline" className={`text-xs ${severityColors[bottleneck.severity]}`}>
+                    {bottleneck.severity}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{bottleneck.count} applications</span>
+                  <span>Avg. {bottleneck.avgDaysStuck} days stuck</span>
+                </div>
+                <p className="text-xs text-muted-foreground">{bottleneck.recommendation}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {data.improvements.length > 0 && (
+          <div className="space-y-2 pt-2 border-t">
+            <span className="text-sm font-medium text-muted-foreground">Suggested Improvements</span>
+            {data.improvements.map((improvement, index) => (
+              <div key={index} className="flex items-start gap-2 text-sm p-2 rounded bg-primary/5">
+                <ArrowRight className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                <span>{improvement}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {data.bottlenecks.length === 0 && data.improvements.length === 0 && (
+          <div className="text-center py-6 text-muted-foreground">
+            <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-emerald-500" />
+            <p className="text-sm">Workflow running efficiently</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Conversion Funnel Component (v2.7.0)
+interface ConversionFunnelData {
+  stages: {
+    stage: string;
+    count: number;
+    percentage: number;
+    dropoffRate: number;
+  }[];
+  overallConversionRate: number;
+  bottleneckStage: string;
+  recommendations: string[];
+}
+
+export function AIConversionFunnel() {
+  const { data, isLoading, isError, refetch } = useQuery<ConversionFunnelData>({
+    queryKey: ["/api/ai/conversion-funnel"],
+  });
+
+  if (isLoading) {
+    return (
+      <Card className="border-card-border">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <CardTitle className="text-lg font-medium">Conversion Funnel</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-48 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card className="border-card-border border-destructive/50">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-destructive" />
+            <CardTitle className="text-lg font-medium">Conversion Funnel</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="button-retry-funnel">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!data || data.stages.length === 0) {
+    return (
+      <Card className="border-card-border">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg font-medium">Conversion Funnel</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-6 text-muted-foreground">
+            <BarChart3 className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No applications to analyze</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="border-card-border">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg font-medium">Conversion Funnel</CardTitle>
+          </div>
+          <Badge variant={data.overallConversionRate >= 50 ? "default" : "secondary"}>
+            {data.overallConversionRate}% Conversion
+          </Badge>
+        </div>
+        {data.bottleneckStage !== "None identified" && (
+          <CardDescription>Bottleneck: {data.bottleneckStage}</CardDescription>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          {data.stages.map((stage, index) => (
+            <div key={index} className="space-y-1" data-testid={`funnel-stage-${index}`}>
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">{stage.stage}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">{stage.count}</span>
+                  <Badge 
+                    variant="outline" 
+                    className={`text-xs ${stage.dropoffRate > 30 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}
+                  >
+                    {stage.dropoffRate > 0 ? `-${stage.dropoffRate}%` : ""}
+                  </Badge>
+                </div>
+              </div>
+              <Progress value={stage.percentage} className="h-2" />
+            </div>
+          ))}
+        </div>
+
+        {data.recommendations.length > 0 && (
+          <div className="space-y-2 pt-2 border-t">
+            <span className="text-xs font-medium text-muted-foreground">Recommendations</span>
+            {data.recommendations.slice(0, 3).map((rec, index) => (
+              <div key={index} className="flex items-start gap-2 text-sm p-2 rounded bg-blue-50 dark:bg-blue-950">
+                <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                <span className="text-blue-700 dark:text-blue-300">{rec}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Cohort Analysis Component (v2.7.0)
+interface CohortAnalysisData {
+  cohorts: {
+    name: string;
+    criteria: string;
+    count: number;
+    avgScore: number;
+    conversionRate: number;
+    insights: string[];
+  }[];
+  patterns: string[];
+  recommendations: string[];
+}
+
+export function AICohortAnalysis() {
+  const { data, isLoading, isError, refetch } = useQuery<CohortAnalysisData>({
+    queryKey: ["/api/ai/cohort-analysis"],
+  });
+
+  if (isLoading) {
+    return (
+      <Card className="border-card-border">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <CardTitle className="text-lg font-medium">Cohort Analysis</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-32 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card className="border-card-border border-destructive/50">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-destructive" />
+            <CardTitle className="text-lg font-medium">Cohort Analysis</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="button-retry-cohort">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!data || data.cohorts.length === 0) {
+    return (
+      <Card className="border-card-border">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg font-medium">Cohort Analysis</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-6 text-muted-foreground">
+            <BarChart3 className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No cohort data available</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="border-card-border">
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="h-5 w-5 text-primary" />
+          <CardTitle className="text-lg font-medium">Cohort Analysis</CardTitle>
+        </div>
+        <CardDescription>Application patterns by group</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-3">
+          {data.cohorts.slice(0, 6).map((cohort, index) => (
+            <div key={index} className="p-3 rounded-lg border space-y-2" data-testid={`cohort-${index}`}>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="font-medium text-sm">{cohort.name}</span>
+                <Badge variant="outline" className="text-xs">
+                  {cohort.count} applicants
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Avg Score: {cohort.avgScore}%</span>
+                <span>Conversion: {cohort.conversionRate}%</span>
+              </div>
+              <Progress value={cohort.conversionRate} className="h-2" />
+              {cohort.insights.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {cohort.insights.map((insight, i) => (
+                    <Badge key={i} variant="secondary" className="text-xs">
+                      {insight}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {data.patterns.length > 0 && (
+          <div className="space-y-2 pt-2 border-t">
+            <span className="text-xs font-medium text-muted-foreground">Patterns</span>
+            {data.patterns.map((pattern, index) => (
+              <div key={index} className="flex items-start gap-2 text-sm p-2 rounded bg-muted/50">
+                <TrendingUp className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                <span>{pattern}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {data.recommendations.length > 0 && (
+          <div className="space-y-2 pt-2 border-t">
+            <span className="text-xs font-medium text-muted-foreground">Recommendations</span>
+            {data.recommendations.map((rec, index) => (
+              <div key={index} className="flex items-start gap-2 text-sm p-2 rounded bg-primary/5">
+                <ArrowRight className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                <span>{rec}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Sibling Detection Component (v2.7.0)
+interface SiblingDetectionData {
+  siblingGroups: {
+    familyId: string;
+    applications: {
+      applicationId: string;
+      studentName: string;
+      grade: string;
+      status: string;
+    }[];
+    recommendedAction: string;
+  }[];
+  totalSiblingApplications: number;
+  potentialDiscounts: number;
+  insights: string[];
+}
+
+export function AISiblingDetection() {
+  const { data, isLoading, isError, refetch } = useQuery<SiblingDetectionData>({
+    queryKey: ["/api/ai/sibling-detection"],
+  });
+
+  if (isLoading) {
+    return (
+      <Card className="border-card-border">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <CardTitle className="text-lg font-medium">Sibling Detection</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-24 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card className="border-card-border border-destructive/50">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-destructive" />
+            <CardTitle className="text-lg font-medium">Sibling Detection</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="button-retry-sibling">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!data || data.siblingGroups.length === 0) {
+    return (
+      <Card className="border-card-border">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <ListChecks className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg font-medium">Sibling Detection</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-6 text-muted-foreground">
+            <ListChecks className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No sibling applications detected</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="border-card-border">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <ListChecks className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg font-medium">Sibling Detection</CardTitle>
+          </div>
+          <Badge variant="outline">
+            {data.siblingGroups.length} families
+          </Badge>
+        </div>
+        <CardDescription>
+          {data.totalSiblingApplications} total sibling applications
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-3">
+          {data.siblingGroups.slice(0, 5).map((group, index) => (
+            <div key={index} className="p-3 rounded-lg border space-y-2" data-testid={`sibling-group-${index}`}>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="font-medium text-sm">{group.familyId}</span>
+                <Badge variant="outline" className="text-xs">
+                  {group.applications.length} siblings
+                </Badge>
+              </div>
+              <div className="space-y-1">
+                {group.applications.map((app, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs p-1 rounded bg-muted/50">
+                    <span>{app.studentName}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">{app.grade}</span>
+                      <Badge variant="secondary" className="text-xs capitalize">
+                        {app.status.replace(/_/g, " ")}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground italic">{group.recommendedAction}</p>
+            </div>
+          ))}
+        </div>
+
+        {data.potentialDiscounts > 0 && (
+          <div className="flex items-start gap-2 text-sm p-2 rounded bg-emerald-50 dark:bg-emerald-950">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+            <span className="text-emerald-700 dark:text-emerald-300">
+              {data.potentialDiscounts} applications eligible for sibling discount
+            </span>
+          </div>
+        )}
+
+        {data.insights.length > 0 && (
+          <div className="space-y-2 pt-2 border-t">
+            {data.insights.map((insight, index) => (
+              <div key={index} className="flex items-start gap-2 text-sm p-2 rounded bg-muted/50">
+                <Info className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <span className="text-muted-foreground">{insight}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
