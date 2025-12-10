@@ -311,10 +311,9 @@ export class DatabaseStorage implements IStorage {
     const totalResult = await db.select({ count: sql<number>`count(*)` }).from(admissionApplications);
     const total = Number(totalResult[0]?.count || 0);
 
-    const pendingStatuses = ["application_submitted", "documents_pending", "under_review"] as const;
     const pendingResult = await db.select({ count: sql<number>`count(*)` })
       .from(admissionApplications)
-      .where(inArray(admissionApplications.status, pendingStatuses));
+      .where(sql`${admissionApplications.status} IN ('application_submitted', 'documents_pending', 'under_review')`);
     const pending = Number(pendingResult[0]?.count || 0);
 
     const enrolledResult = await db.select({ count: sql<number>`count(*)` })

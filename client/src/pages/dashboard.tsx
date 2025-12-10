@@ -348,7 +348,7 @@ export default function Dashboard() {
                         ) : (
                           <MessageSquare className="h-4 w-4 text-indigo-600" />
                         )}
-                        <Badge variant="outline" size="sm" className="text-xs">
+                        <Badge variant="outline" className="text-xs">
                           {event.type === "entrance_test" ? "Entrance Test" : "Interview"}
                         </Badge>
                       </div>
