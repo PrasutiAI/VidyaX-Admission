@@ -266,6 +266,15 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admission/applications/:id/status-history", async (req, res) => {
+    try {
+      const history = await storage.getApplicationStatusHistory(req.params.id);
+      res.json(history);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Screening - Entrance Test
   app.put("/api/admission/applications/:id/entrance-test/score", async (req, res) => {
     try {
