@@ -2,153 +2,7 @@
 
 ## Overview
 
-This is a Student Admission Management System designed to handle the complete admission lifecycle from inquiry to enrollment. The application provides an administrative dashboard for managing admission cycles, student applications, seat configurations, and document tracking. It's built as a full-stack TypeScript application with a React frontend and Express backend. The system emphasizes AI-first capabilities for intelligent decision-making assistance.
-
-## Version History
-
-### v1.4.0 (December 2024) - AI-First Enhanced Implementation
-**Major AI Enhancements:**
-- Enhanced AI recommendation engine with context-aware suggestions
-- AI-powered auto-suggest next steps for each application status
-- Predictive analytics for admission outcomes
-- Smart application review with automated insights
-- AI insights dashboard integration
-- Intelligent document verification suggestions
-- Enhanced waitlist prioritization with multi-factor scoring
-
-**New Features:**
-- Real-time AI analysis of application profiles
-- Automated action recommendations based on application status
-- Confidence-based eligibility scoring
-- Smart document completeness tracking
-- Priority-based waitlist management
-
-### v1.3.0 (December 2024) - AI-First Enhancement
-- Added AI-powered smart recommendations for application processing
-- Implemented AI-based eligibility scoring and assessment
-- Added intelligent document verification suggestions
-- Smart waitlist management with AI prioritization
-- Enhanced decision-making assistance features
-
-### v1.2.0 (December 2024) - Complete Feature Implementation
-- Full admission workflow implementation (inquiry to enrollment)
-- Entrance test scheduling and scoring
-- Interview scheduling and result recording
-- Offer letter generation and acceptance flow
-- Complete enrollment workflow
-- Comprehensive reporting (5 report types)
-- Notification system with real-time updates
-- Application communications/notes tracking
-
-### v1.1.0 (November 2024) - Core Features
-- Dashboard with statistics and analytics
-- Admission cycle management (CRUD operations)
-- Seat configuration per grade
-- Application submission with full data model
-- Document upload and verification
-- Status tracking with history
-
-### v1.0.0 (October 2024) - Initial Release
-- Basic project structure
-- Authentication scaffolding
-- Database schema design
-- Core UI components
-
-## Feature Status
-
-### Implemented Features
-
-| Module | Feature | Status | Description |
-|--------|---------|--------|-------------|
-| **Admission Cycles** | Create/Edit/Delete Cycles | Implemented | Full CRUD for admission cycles |
-| | Status Management | Implemented | Draft → Open → Closed → Archived workflow |
-| | Active Cycle Detection | Implemented | Auto-detect currently open cycle |
-| | Application Fee Config | Implemented | Configure application fee per cycle |
-| **Seat Management** | Grade Configuration | Implemented | Configure seats per grade |
-| | Reserved Seats | Implemented | Category-wise seat reservation |
-| | Availability Tracking | Implemented | Real-time seat availability calculation |
-| | Management Quota | Implemented | Configure management quota seats |
-| **Applications** | Application Submission | Implemented | Complete application form with validation |
-| | Application Listing | Implemented | Paginated list with filters and search |
-| | Application Details | Implemented | Detailed view with all information |
-| | Status Workflow | Implemented | Full 15-state status workflow |
-| | Status History | Implemented | Complete audit trail of status changes |
-| | Application Number Generation | Implemented | Auto-generated unique application numbers |
-| **Documents** | Document Upload | Implemented | Upload documents with type classification |
-| | Document Verification | Implemented | Verify/Reject documents with remarks |
-| | Document Listing | Implemented | View all application documents |
-| | Document Types | Implemented | 8 document types supported |
-| **Screening** | Entrance Test Scheduling | Implemented | Schedule tests with date |
-| | Test Score Recording | Implemented | Record entrance test scores |
-| | Interview Scheduling | Implemented | Schedule interviews with date |
-| | Interview Results | Implemented | Record scores and notes |
-| **Enrollment** | Offer Generation | Implemented | Generate admission offers |
-| | Offer Acceptance | Implemented | Accept admission offers |
-| | Enrollment Completion | Implemented | Complete enrollment process |
-| | Offer Letter Data | Implemented | Generate offer letter content |
-| **Reports** | Application Summary | Implemented | Status and grade-wise breakdown |
-| | Enrollment Report | Implemented | Enrolled students by grade |
-| | Document Verification | Implemented | Document status statistics |
-| | Entrance Test Results | Implemented | Test scores and pass rates |
-| | Rejection Analysis | Implemented | Rejection reasons breakdown |
-| **Dashboard** | Statistics Cards | Implemented | Key metrics at a glance |
-| | Active Cycle Overview | Implemented | Current cycle information |
-| | Recent Applications | Implemented | Latest application submissions |
-| | Seat Availability | Implemented | Visual seat status by grade |
-| | Upcoming Events | Implemented | Scheduled tests and interviews |
-| **Notifications** | Status Change Alerts | Implemented | Auto-notifications on status change |
-| | Notification List | Implemented | View all notifications |
-| | Read/Unread Tracking | Implemented | Mark notifications as read |
-| | Mark All Read | Implemented | Bulk notification management |
-| **Communications** | Notes/Communications | Implemented | Track calls, emails, meetings, SMS |
-| | Communication History | Implemented | View communication log |
-| | Contact Person Tracking | Implemented | Track who was contacted |
-| **AI Features** | Smart Recommendations | Implemented | AI-powered processing suggestions |
-| | Eligibility Scoring | Implemented | AI-based application scoring (0-100) |
-| | Document Suggestions | Implemented | AI document verification hints |
-| | Waitlist Prioritization | Implemented | AI-based waitlist ordering |
-| | Auto-Suggest Next Steps | Implemented | Context-aware action recommendations |
-| | Predictive Analytics | Implemented | Admission outcome predictions |
-| | Confidence Scoring | Implemented | High/Medium/Low confidence levels |
-| **Settings** | System Settings | Implemented | Configuration management |
-| | Theme Toggle | Implemented | Dark/Light mode support |
-
-### Pending Features (Future Roadmap)
-
-| Module | Feature | Priority | Description |
-|--------|---------|----------|-------------|
-| **Authentication** | User Login/Logout | High | Admin authentication system |
-| | Role-Based Access | High | Permission-based feature access |
-| | Password Reset | Medium | Self-service password recovery |
-| | Multi-Factor Auth | Low | Enhanced security with MFA |
-| **Payment Integration** | Application Fee | Medium | Online payment for application fee |
-| | Admission Fee | Medium | Enrollment fee payment |
-| | Payment Gateway | Medium | Stripe/Razorpay integration |
-| | Payment History | Low | Track all payment transactions |
-| **PDF Generation** | Offer Letter PDF | Medium | Generate downloadable offer letters |
-| | Application Receipt | Low | PDF receipt for applications |
-| | Admission Card | Low | Generate admission cards |
-| **Email/SMS** | Email Notifications | High | Send emails to parents/guardians |
-| | SMS Alerts | Medium | SMS notifications for key events |
-| | Email Templates | Medium | Customizable email templates |
-| | Automated Reminders | Low | Auto-send deadline reminders |
-| **Bulk Operations** | Bulk Status Update | Medium | Update multiple applications at once |
-| | Bulk Document Verify | Low | Verify multiple documents together |
-| | Bulk Export | Medium | Export applications to CSV/Excel |
-| | Bulk Email | Low | Send emails to multiple applicants |
-| **Advanced Analytics** | Trend Analysis | Low | Historical trend charts |
-| | Conversion Funnel | Medium | Application to enrollment funnel |
-| | Comparative Analytics | Low | Year-over-year comparison |
-| | AI Recommendations Dashboard | Medium | Dedicated AI insights page |
-| **File Storage** | Cloud Storage | High | Store documents in cloud storage |
-| | File Preview | Medium | Preview documents in browser |
-| | File Size Limits | Low | Configure upload size limits |
-| **Audit Trail** | Activity Logs | Medium | Complete admin activity logging |
-| | Change History | Low | Track all data modifications |
-| | User Actions | Medium | Track who did what |
-| **Integration** | Student Information System | Medium | Sync enrolled students to SIS |
-| | Class Management | Low | Auto-assign to sections |
-| | Fee Management | Medium | Sync with fee module |
+This project is a full-stack TypeScript application designed to manage the entire student admission lifecycle, from initial inquiry to final enrollment. It features a React frontend and an Express.js backend, providing an administrative dashboard for managing admission cycles, student applications, seat configurations, and document tracking. A key aspect of the system is its "AI-first" approach, incorporating intelligent features such as AI-powered recommendations, eligibility scoring, predictive analytics for admission outcomes, and smart waitlist prioritization to assist in decision-making and streamline the admission process. The system aims to enhance efficiency and provide data-driven insights for admission management.
 
 ## User Preferences
 
@@ -156,325 +10,60 @@ Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
-### Frontend Architecture
-- **Framework**: React 18 with TypeScript
-- **Routing**: Wouter (lightweight React router)
-- **State Management**: TanStack React Query for server state caching and synchronization
-- **UI Components**: shadcn/ui component library built on Radix UI primitives
-- **Styling**: Tailwind CSS with custom design tokens following Material Design 3 principles
-- **Theming**: Custom theme provider with light/dark mode support using CSS variables
-- **Build Tool**: Vite for development and production builds
-- **Charts**: Recharts for data visualization
-- **Icons**: Lucide React for consistent iconography
+### UI/UX Decisions
+The frontend uses React 18 with TypeScript, styled using Tailwind CSS and `shadcn/ui` components built on Radix UI primitives. It follows Material Design 3 principles, supports light/dark mode theming, and uses Lucide React for iconography. Recharts is used for data visualization.
 
-### Backend Architecture
-- **Runtime**: Node.js with Express.js
-- **Language**: TypeScript with ESM modules
-- **API Design**: RESTful API endpoints under `/api` prefix
-- **Database ORM**: Drizzle ORM with PostgreSQL dialect
-- **Schema Validation**: Zod for runtime validation, drizzle-zod for schema-to-validator generation
-- **Session Management**: express-session with connect-pg-simple for PostgreSQL session storage
+### Technical Implementations
+The backend is built with Node.js and Express.js, utilizing TypeScript with ESM modules. It exposes RESTful API endpoints for all functionalities. Data persistence is managed via PostgreSQL, using Drizzle ORM for type-safe database interactions and migrations. Zod is used for schema validation. Session management is handled by `express-session` with `connect-pg-simple`.
 
-### Data Layer
-- **Database**: PostgreSQL (required via DATABASE_URL environment variable)
-- **Schema Location**: `shared/schema.ts` contains all Drizzle table definitions
-- **Migrations**: Managed via drizzle-kit with output to `./migrations` directory
+### Feature Specifications
+The system encompasses a comprehensive set of features, including:
+- **Admission Cycles**: CRUD operations, status management (Draft, Open, Closed, Archived), and application fee configuration.
+- **Seat Management**: Configuration of seats per grade, reserved seats, management quota, and real-time availability tracking.
+- **Applications**: Multi-step application submission, detailed viewing, 15-state status workflow with history tracking, and unique application number generation.
+- **Documents**: Upload, verification, and classification into 8 types (e.g., Birth Certificate, Passport Photo).
+- **Screening**: Scheduling and recording of entrance tests and interviews.
+- **Enrollment**: Offer generation, acceptance flow, and final enrollment completion.
+- **Reporting**: Five types of reports including application summaries and enrollment statistics.
+- **Notifications**: Real-time alerts for status changes and events.
+- **Communications**: Tracking of interactions (calls, emails, meetings, SMS, notes) with applicants.
+- **AI Features**:
+    - **Smart Recommendations**: Context-aware suggestions based on application status, documents, screening results, and seat availability.
+    - **Eligibility Scoring**: A multi-factor system (0-100 points) based on age, document completion, entrance test, and interview performance, with confidence levels (High, Medium, Low).
+    - **Document Suggestions**: Intelligent tracking of required, recommended, and optional documents with verification status.
+    - **Waitlist Prioritization**: Scoring factors include test performance, interview performance, academic record, and early application bonus.
+    - **Predictive Analytics**: Forecasting admission outcomes.
+    - **Auto-Suggest Next Steps**: Context-aware action recommendations.
 
-### Key Data Models
-- **Admission Cycles**: Academic year-based admission periods with status workflow (draft → open → closed → archived)
-- **Grade Seat Configurations**: Per-grade seat allocations within admission cycles
-- **Applications**: Student admission applications with multi-step status tracking (15 status states)
-- **Application Documents**: File attachments supporting applications (8 document types)
-- **Status History**: Audit trail for application status changes
-- **Communications**: Notes and communication logs per application (5 communication types)
-- **Notifications**: System notifications for status changes and events
-- **Seat Reservations**: Temporary seat holds during enrollment
-
-### Application Structure
-```
-├── client/           # React frontend application
-│   └── src/
-│       ├── components/   # Reusable UI components
-│       │   └── ui/       # shadcn/ui components
-│       ├── pages/        # Route page components
-│       ├── hooks/        # Custom React hooks
-│       └── lib/          # Utilities and query client
-├── server/           # Express backend
-│   ├── index.ts      # Server entry point
-│   ├── routes.ts     # API route definitions
-│   ├── storage.ts    # Database access layer
-│   └── db.ts         # Database connection
-├── shared/           # Shared code between client/server
-│   └── schema.ts     # Drizzle schema definitions
-└── migrations/       # Database migrations
-```
-
-## API Endpoints
-
-### Admission Cycles
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/admission/cycles` | List all cycles |
-| GET | `/api/admission/cycles/active` | Get active cycle |
-| GET | `/api/admission/cycles/:id` | Get cycle details |
-| POST | `/api/admission/cycles` | Create cycle |
-| PUT | `/api/admission/cycles/:id` | Update cycle |
-| PATCH | `/api/admission/cycles/:id/status` | Change status |
-| DELETE | `/api/admission/cycles/:id` | Delete cycle |
-
-### Seat Configuration
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/admission/cycles/:id/seats` | Get seat configs |
-| GET | `/api/admission/cycles/:id/seats/availability` | Get availability |
-| POST | `/api/admission/cycles/:id/seats` | Create config |
-| PUT | `/api/admission/cycles/:id/seats/:gradeId` | Update config |
-
-### Applications
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/admission/applications` | List all applications |
-| GET | `/api/admission/applications/recent` | Recent applications |
-| GET | `/api/admission/applications/:id` | Get application details |
-| POST | `/api/admission/applications` | Submit application |
-| PUT | `/api/admission/applications/:id` | Update application |
-| PATCH | `/api/admission/applications/:id/status` | Update status |
-| GET | `/api/admission/applications/:id/status-history` | Status history |
-
-### Documents
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/admission/applications/:id/documents` | List documents |
-| POST | `/api/admission/applications/:id/documents` | Upload document |
-| PATCH | `/api/admission/applications/:id/documents/:docId/verify` | Verify document |
-| DELETE | `/api/admission/applications/:id/documents/:docId` | Delete document |
-
-### Screening
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/admission/applications/:id/entrance-test` | Schedule test |
-| PUT | `/api/admission/applications/:id/entrance-test/score` | Record score |
-| POST | `/api/admission/applications/:id/interview` | Schedule interview |
-| PUT | `/api/admission/applications/:id/interview/result` | Record result |
-
-### Enrollment
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/admission/applications/:id/offer` | Generate offer |
-| POST | `/api/admission/applications/:id/accept-offer` | Accept offer |
-| POST | `/api/admission/applications/:id/enroll` | Complete enrollment |
-| GET | `/api/admission/applications/:id/offer-letter` | Get offer letter data |
-
-### Communications
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/admission/applications/:id/communications` | Get communications |
-| POST | `/api/admission/applications/:id/communications` | Add communication |
-
-### Notifications
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/notifications` | Get all notifications |
-| GET | `/api/notifications/unread-count` | Get unread count |
-| PATCH | `/api/notifications/:id/read` | Mark as read |
-| PATCH | `/api/notifications/mark-all-read` | Mark all as read |
-
-### Reports
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/reports/application-summary` | Application summary |
-| GET | `/api/reports/enrollment` | Enrollment report |
-| GET | `/api/reports/document-verification` | Document status |
-| GET | `/api/reports/entrance-test-results` | Test results |
-| GET | `/api/reports/rejection-analysis` | Rejection analysis |
-
-### Dashboard & Analytics
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/dashboard/stats` | Dashboard statistics |
-| GET | `/api/analytics/applications-by-status` | Status breakdown |
-| GET | `/api/analytics/application-trends` | Application trends |
-| GET | `/api/analytics/scheduled-events` | Upcoming events |
-
-### AI Features
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/ai/recommendations/:id` | Get AI recommendations |
-| GET | `/api/ai/eligibility-score/:id` | Get eligibility score |
-| GET | `/api/ai/document-suggestions/:id` | Document suggestions |
-| GET | `/api/ai/waitlist-priority` | Waitlist prioritization |
-| GET | `/api/ai/next-steps/:id` | Get auto-suggested next steps |
-| GET | `/api/ai/predictive-score/:id` | Predictive outcome score |
-
-## Design Patterns
-- **Storage Interface Pattern**: `IStorage` interface in `storage.ts` abstracts database operations for testability
-- **Query Key Convention**: React Query uses URL paths as query keys for automatic cache invalidation
-- **Component Composition**: UI built from small, composable shadcn/ui components
-- **Path Aliases**: `@/` maps to client/src, `@shared/` maps to shared directory
-- **AI-First Approach**: AI recommendations integrated throughout the application workflow
-
-## AI Features Detailed
-
-### Smart Recommendations
-The system provides context-aware recommendations based on:
-- Current application status
-- Document verification state
-- Screening results (entrance test, interview)
-- Seat availability
-- Application timeline
-
-### Eligibility Scoring
-Multi-factor scoring system (0-100 points):
-- **Age Eligibility**: 20 points max
-- **Document Completion**: 30 points max
-- **Entrance Test**: 25 points max
-- **Interview**: 25 points max
-
-Confidence levels: High (75+), Medium (45-74), Low (<45)
-
-### Document Suggestions
-Intelligent document tracking:
-- Required documents (Birth Certificate, Passport Photo, Address Proof)
-- Recommended documents (Transfer Certificate, Previous Report Card)
-- Optional documents (Category Certificate, Medical Certificate)
-- Verification status tracking with action suggestions
-
-### Waitlist Prioritization
-Priority scoring factors:
-- Entrance test performance (up to +20 points)
-- Interview performance (up to +20 points)
-- Previous academic record (up to +10 points)
-- Early applicant bonus (+5 points)
+### System Design Choices
+- **Frontend Framework**: React 18 with TypeScript for a dynamic user interface.
+- **Backend Runtime**: Node.js with Express.js for a scalable server.
+- **Database**: PostgreSQL for robust data storage.
+- **ORM**: Drizzle ORM for type-safe and efficient database interactions.
+- **State Management**: TanStack React Query for server state caching and synchronization.
+- **Styling**: Tailwind CSS with `shadcn/ui` for a modern and consistent UI.
+- **Build Tool**: Vite for fast development and optimized production builds.
+- **API Design**: RESTful architecture for clear and organized endpoints.
+- **AI-First Approach**: Core system logic integrates AI for decision-making assistance, enhancing the efficiency and intelligence of the admission process.
 
 ## External Dependencies
 
 ### Database
-- **PostgreSQL**: Primary data store, connection via `DATABASE_URL` environment variable
-- **Drizzle ORM**: Type-safe database queries and migrations
+- **PostgreSQL**: Used as the primary relational database.
+- **Drizzle ORM**: Object-Relational Mapper for interacting with PostgreSQL.
 
 ### UI Component Libraries
-- **Radix UI**: Unstyled, accessible component primitives (dialogs, dropdowns, forms)
-- **shadcn/ui**: Pre-styled component collection using Radix UI primitives
-- **Lucide React**: Icon library
-- **Recharts**: Data visualization library
+- **Radix UI**: Provides unstyled, accessible UI primitives.
+- **shadcn/ui**: A collection of pre-styled UI components built on Radix UI.
+- **Lucide React**: Icon library for consistent iconography.
+- **Recharts**: For data visualization and charting.
 
 ### Frontend Libraries
-- **TanStack React Query**: Server state management and caching
-- **date-fns**: Date formatting and manipulation
-- **class-variance-authority**: Component variant management
-- **tailwind-merge**: Tailwind class conflict resolution
-- **wouter**: Lightweight routing
+- **TanStack React Query**: Manages server state, caching, and data synchronization.
+- **Wouter**: A lightweight client-side router for React.
+- **date-fns**: A utility library for date manipulation.
 
 ### Backend Libraries
-- **express-session**: Session middleware
-- **connect-pg-simple**: PostgreSQL session store
-- **zod**: Schema validation
-- **zod-validation-error**: Human-readable Zod error messages
-
-### Development Tools
-- **Vite**: Frontend build tool with HMR
-- **tsx**: TypeScript execution for Node.js
-- **esbuild**: Production bundling for server code
-- **drizzle-kit**: Database migration tooling
-
-## Application Status Workflow
-
-```
-┌─────────────┐
-│   INQUIRY   │ (Optional starting point)
-└──────┬──────┘
-       │
-       ▼
-┌─────────────────────┐
-│ APPLICATION_SUBMITTED│ (Main entry point)
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  DOCUMENTS_PENDING  │◄────────────┐
-└──────────┬──────────┘             │
-           │                        │
-           ▼                        │
-┌─────────────────────┐    ┌───────┴────────┐
-│ DOCUMENTS_VERIFIED  │    │ Document Rejected│
-└──────────┬──────────┘    └────────────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ ENTRANCE_TEST_      │
-│ SCHEDULED           │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ ENTRANCE_TEST_      │
-│ COMPLETED           │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ INTERVIEW_SCHEDULED │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ INTERVIEW_COMPLETED │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│    UNDER_REVIEW     │
-└──────────┬──────────┘
-           │
-     ┌─────┴─────┬────────────┐
-     ▼           ▼            ▼
-┌─────────┐ ┌─────────┐ ┌─────────┐
-│ OFFER   │ │WAITLIST │ │REJECTED │
-│EXTENDED │ │ED       │ └─────────┘
-└────┬────┘ └─────────┘
-     │
-     ▼
-┌─────────────────────┐
-│   OFFER_ACCEPTED    │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│      ENROLLED       │ (Final success state)
-└─────────────────────┘
-
-Additional state: WITHDRAWN (can occur from any state)
-```
-
-## Document Types Supported
-
-| Type | Label | Priority |
-|------|-------|----------|
-| birth_certificate | Birth Certificate | Required |
-| passport_photo | Passport Photo | Required |
-| address_proof | Address Proof | Required |
-| transfer_certificate | Transfer Certificate | Recommended |
-| previous_report_card | Previous Report Card | Recommended |
-| category_certificate | Category Certificate | Optional |
-| medical_certificate | Medical Certificate | Optional |
-| other | Other Documents | Optional |
-
-## Communication Types
-
-| Type | Description |
-|------|-------------|
-| call | Phone call with parent/guardian |
-| email | Email correspondence |
-| meeting | In-person or virtual meeting |
-| sms | SMS/Text message |
-| note | Internal notes/observations |
-
-## Notification Types
-
-| Type | Description |
-|------|-------------|
-| reminder | Deadline reminders |
-| status_change | Application status updates |
-| deadline | Upcoming deadline alerts |
-| document | Document-related notifications |
-| system | System-level notifications |
+- **express-session**: Middleware for managing user sessions.
+- **connect-pg-simple**: PostgreSQL session store for `express-session`.
+- **Zod**: Schema declaration and validation library.
