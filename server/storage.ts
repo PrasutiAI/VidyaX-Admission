@@ -95,6 +95,9 @@ export interface IStorage {
   
   // Offer Letter
   generateOfferLetterData(applicationId: string): Promise<any>;
+  
+  // AI Features
+  getWaitlistedApplications(): Promise<AdmissionApplication[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -850,6 +853,14 @@ export class DatabaseStorage implements IStorage {
       fatherContact: application.fatherContact,
       fatherEmail: application.fatherEmail,
     };
+  }
+
+  // AI Features
+  async getWaitlistedApplications(): Promise<AdmissionApplication[]> {
+    return db.select()
+      .from(admissionApplications)
+      .where(eq(admissionApplications.status, "waitlisted"))
+      .orderBy(desc(admissionApplications.updatedAt));
   }
 }
 

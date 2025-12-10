@@ -706,5 +706,442 @@ export async function registerRoutes(
     }
   });
 
+  // AI-First Features
+
+  // AI Recommendations for Application Processing
+  app.get("/api/ai/recommendations/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplicationWithRelations(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+
+      const recommendations = generateAIRecommendations(application);
+      res.json(recommendations);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Eligibility Score
+  app.get("/api/ai/eligibility-score/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplicationWithRelations(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+
+      const eligibilityScore = calculateEligibilityScore(application);
+      res.json(eligibilityScore);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Document Suggestions
+  app.get("/api/ai/document-suggestions/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplicationWithRelations(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+
+      const suggestions = generateDocumentSuggestions(application);
+      res.json(suggestions);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Waitlist Prioritization
+  app.get("/api/ai/waitlist-priority", async (req, res) => {
+    try {
+      const waitlistedApps = await storage.getWaitlistedApplications();
+      const prioritizedList = calculateWaitlistPriority(waitlistedApps);
+      res.json(prioritizedList);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   return httpServer;
+}
+
+// AI Helper Functions
+
+interface AIRecommendation {
+  type: "action" | "warning" | "info";
+  priority: "high" | "medium" | "low";
+  title: string;
+  description: string;
+  suggestedAction?: string;
+}
+
+function generateAIRecommendations(application: any): { recommendations: AIRecommendation[], summary: string } {
+  const recommendations: AIRecommendation[] = [];
+  
+  const status = application.status;
+  const documents = application.documents || [];
+  const hasEntranceTest = !!application.entranceTestScore;
+  const hasInterview = !!application.interviewScore;
+  
+  // Check for pending documents
+  const pendingDocs = documents.filter((d: any) => d.verificationStatus === "pending");
+  if (pendingDocs.length > 0) {
+    recommendations.push({
+      type: "action",
+      priority: "high",
+      title: "Documents Pending Verification",
+      description: `${pendingDocs.length} document(s) need verification before proceeding.`,
+      suggestedAction: "Review and verify pending documents"
+    });
+  }
+
+  // Check for rejected documents
+  const rejectedDocs = documents.filter((d: any) => d.verificationStatus === "rejected");
+  if (rejectedDocs.length > 0) {
+    recommendations.push({
+      type: "warning",
+      priority: "high",
+      title: "Rejected Documents Need Attention",
+      description: `${rejectedDocs.length} document(s) were rejected. Request resubmission from the applicant.`,
+      suggestedAction: "Contact parent/guardian for document resubmission"
+    });
+  }
+
+  // Status-specific recommendations
+  if (status === "documents_verified" && !hasEntranceTest) {
+    recommendations.push({
+      type: "action",
+      priority: "medium",
+      title: "Schedule Entrance Test",
+      description: "Documents are verified. The application is ready for entrance test scheduling.",
+      suggestedAction: "Schedule entrance test for the student"
+    });
+  }
+
+  if (status === "entrance_test_completed" && !hasInterview) {
+    const score = parseFloat(application.entranceTestScore || "0");
+    if (score >= 40) {
+      recommendations.push({
+        type: "action",
+        priority: "medium",
+        title: "Schedule Interview",
+        description: `Student scored ${score}% in entrance test. Ready for interview scheduling.`,
+        suggestedAction: "Schedule interview with student and parents"
+      });
+    } else {
+      recommendations.push({
+        type: "warning",
+        priority: "high",
+        title: "Low Entrance Test Score",
+        description: `Student scored ${score}% which is below the passing threshold (40%). Consider waitlisting or rejection.`,
+        suggestedAction: "Review application for waitlist or rejection"
+      });
+    }
+  }
+
+  if (status === "interview_completed") {
+    const testScore = parseFloat(application.entranceTestScore || "0");
+    const interviewScore = parseFloat(application.interviewScore || "0");
+    const avgScore = (testScore + interviewScore) / 2;
+    
+    if (avgScore >= 60) {
+      recommendations.push({
+        type: "action",
+        priority: "high",
+        title: "Strong Candidate - Extend Offer",
+        description: `Combined score of ${avgScore.toFixed(1)}% suggests this is a strong candidate.`,
+        suggestedAction: "Consider extending admission offer"
+      });
+    } else if (avgScore >= 40) {
+      recommendations.push({
+        type: "info",
+        priority: "medium",
+        title: "Average Performance",
+        description: `Combined score of ${avgScore.toFixed(1)}%. Consider seat availability before deciding.`,
+        suggestedAction: "Review against other applications"
+      });
+    }
+  }
+
+  if (status === "offer_extended") {
+    recommendations.push({
+      type: "info",
+      priority: "medium",
+      title: "Awaiting Offer Acceptance",
+      description: "Offer has been extended. Follow up if no response within 7 days.",
+      suggestedAction: "Send reminder if needed"
+    });
+  }
+
+  if (status === "offer_accepted") {
+    recommendations.push({
+      type: "action",
+      priority: "high",
+      title: "Complete Enrollment",
+      description: "Offer has been accepted. Complete the enrollment process.",
+      suggestedAction: "Process enrollment and collect admission fee"
+    });
+  }
+
+  // Check application age
+  const appDate = new Date(application.applicationDate);
+  const daysSinceApplication = Math.floor((Date.now() - appDate.getTime()) / (1000 * 60 * 60 * 24));
+  
+  if (daysSinceApplication > 30 && !["enrolled", "rejected", "withdrawn"].includes(status)) {
+    recommendations.push({
+      type: "warning",
+      priority: "medium",
+      title: "Application Aging",
+      description: `This application is ${daysSinceApplication} days old. Consider expediting processing.`,
+      suggestedAction: "Prioritize this application"
+    });
+  }
+
+  // Generate summary
+  const highPriorityCount = recommendations.filter(r => r.priority === "high").length;
+  const actionCount = recommendations.filter(r => r.type === "action").length;
+  
+  let summary = "No immediate actions required.";
+  if (highPriorityCount > 0) {
+    summary = `${highPriorityCount} high-priority item(s) need attention.`;
+  } else if (actionCount > 0) {
+    summary = `${actionCount} action(s) recommended for this application.`;
+  }
+
+  return { recommendations, summary };
+}
+
+interface EligibilityScore {
+  overallScore: number;
+  breakdown: {
+    category: string;
+    score: number;
+    maxScore: number;
+    notes: string;
+  }[];
+  recommendation: string;
+  confidence: "high" | "medium" | "low";
+}
+
+function calculateEligibilityScore(application: any): EligibilityScore {
+  const breakdown: { category: string; score: number; maxScore: number; notes: string }[] = [];
+  
+  // Document completeness (25 points)
+  const documents = application.documents || [];
+  const verifiedDocs = documents.filter((d: any) => d.verificationStatus === "verified").length;
+  const requiredDocs = 5;
+  const docScore = Math.min(25, (verifiedDocs / requiredDocs) * 25);
+  breakdown.push({
+    category: "Document Completeness",
+    score: Math.round(docScore),
+    maxScore: 25,
+    notes: `${verifiedDocs}/${requiredDocs} required documents verified`
+  });
+
+  // Academic performance (25 points)
+  let academicScore = 15; // Base score
+  if (application.previousMarks) {
+    const marks = parseFloat(application.previousMarks);
+    if (marks >= 80) academicScore = 25;
+    else if (marks >= 60) academicScore = 20;
+    else if (marks >= 40) academicScore = 15;
+    else academicScore = 10;
+  }
+  breakdown.push({
+    category: "Academic Background",
+    score: academicScore,
+    maxScore: 25,
+    notes: application.previousMarks ? `Previous marks: ${application.previousMarks}%` : "Previous academic records not provided"
+  });
+
+  // Entrance test (25 points)
+  let testScore = 0;
+  if (application.entranceTestScore) {
+    const score = parseFloat(application.entranceTestScore);
+    testScore = Math.round((score / 100) * 25);
+  }
+  breakdown.push({
+    category: "Entrance Test",
+    score: testScore,
+    maxScore: 25,
+    notes: application.entranceTestScore ? `Score: ${application.entranceTestScore}%` : "Not yet completed"
+  });
+
+  // Interview (25 points)
+  let interviewScore = 0;
+  if (application.interviewScore) {
+    const score = parseFloat(application.interviewScore);
+    interviewScore = Math.round((score / 100) * 25);
+  }
+  breakdown.push({
+    category: "Interview",
+    score: interviewScore,
+    maxScore: 25,
+    notes: application.interviewScore ? `Score: ${application.interviewScore}%` : "Not yet completed"
+  });
+
+  const overallScore = breakdown.reduce((sum, b) => sum + b.score, 0);
+  
+  // Determine recommendation
+  let recommendation = "";
+  let confidence: "high" | "medium" | "low" = "medium";
+  
+  if (overallScore >= 75) {
+    recommendation = "Strongly recommend admission. Excellent candidate.";
+    confidence = "high";
+  } else if (overallScore >= 60) {
+    recommendation = "Recommend admission. Good candidate with solid profile.";
+    confidence = "high";
+  } else if (overallScore >= 45) {
+    recommendation = "Consider for admission. Average profile, check seat availability.";
+    confidence = "medium";
+  } else if (overallScore >= 30) {
+    recommendation = "May consider for waitlist. Additional evaluation recommended.";
+    confidence = "medium";
+  } else {
+    recommendation = "Does not meet minimum requirements. Consider rejection.";
+    confidence = "low";
+  }
+
+  return { overallScore, breakdown, recommendation, confidence };
+}
+
+interface DocumentSuggestion {
+  documentType: string;
+  status: "missing" | "pending" | "verified" | "rejected";
+  suggestion: string;
+  priority: "required" | "recommended" | "optional";
+}
+
+function generateDocumentSuggestions(application: any): { suggestions: DocumentSuggestion[], completeness: number } {
+  const documents = application.documents || [];
+  const docMap = new Map(documents.map((d: any) => [d.documentType, d]));
+  
+  const requiredDocs = [
+    { type: "birth_certificate", label: "Birth Certificate", priority: "required" as const },
+    { type: "passport_photo", label: "Passport Photo", priority: "required" as const },
+    { type: "address_proof", label: "Address Proof", priority: "required" as const },
+  ];
+
+  const optionalDocs = [
+    { type: "transfer_certificate", label: "Transfer Certificate", priority: "recommended" as const },
+    { type: "previous_report_card", label: "Previous Report Card", priority: "recommended" as const },
+    { type: "category_certificate", label: "Category Certificate", priority: "optional" as const },
+    { type: "medical_certificate", label: "Medical Certificate", priority: "optional" as const },
+  ];
+
+  const allDocs = [...requiredDocs, ...optionalDocs];
+  const suggestions: DocumentSuggestion[] = [];
+
+  for (const docSpec of allDocs) {
+    const doc = docMap.get(docSpec.type);
+    
+    if (!doc) {
+      suggestions.push({
+        documentType: docSpec.label,
+        status: "missing",
+        suggestion: docSpec.priority === "required" 
+          ? "This document is required. Request from parent/guardian."
+          : "Consider requesting this document for a complete application.",
+        priority: docSpec.priority
+      });
+    } else if (doc.verificationStatus === "pending") {
+      suggestions.push({
+        documentType: docSpec.label,
+        status: "pending",
+        suggestion: "Review and verify this document.",
+        priority: docSpec.priority
+      });
+    } else if (doc.verificationStatus === "rejected") {
+      suggestions.push({
+        documentType: docSpec.label,
+        status: "rejected",
+        suggestion: "Document was rejected. Request resubmission with corrections.",
+        priority: docSpec.priority
+      });
+    } else {
+      suggestions.push({
+        documentType: docSpec.label,
+        status: "verified",
+        suggestion: "Document verified.",
+        priority: docSpec.priority
+      });
+    }
+  }
+
+  const verifiedCount = suggestions.filter(s => s.status === "verified").length;
+  const requiredCount = requiredDocs.length;
+  const completeness = Math.round((verifiedCount / allDocs.length) * 100);
+
+  return { suggestions, completeness };
+}
+
+interface WaitlistEntry {
+  applicationId: string;
+  applicationNumber: string;
+  studentName: string;
+  grade: string;
+  priorityScore: number;
+  waitlistedDate: string;
+  factors: string[];
+}
+
+function calculateWaitlistPriority(applications: any[]): WaitlistEntry[] {
+  return applications.map(app => {
+    let priorityScore = 50; // Base score
+    const factors: string[] = [];
+
+    // Entrance test performance
+    if (app.entranceTestScore) {
+      const score = parseFloat(app.entranceTestScore);
+      if (score >= 60) {
+        priorityScore += 20;
+        factors.push("Strong entrance test performance");
+      } else if (score >= 45) {
+        priorityScore += 10;
+        factors.push("Above average entrance test");
+      }
+    }
+
+    // Interview performance
+    if (app.interviewScore) {
+      const score = parseFloat(app.interviewScore);
+      if (score >= 60) {
+        priorityScore += 20;
+        factors.push("Strong interview performance");
+      } else if (score >= 45) {
+        priorityScore += 10;
+        factors.push("Good interview performance");
+      }
+    }
+
+    // Previous academic record
+    if (app.previousMarks) {
+      const marks = parseFloat(app.previousMarks);
+      if (marks >= 75) {
+        priorityScore += 10;
+        factors.push("Excellent previous academics");
+      }
+    }
+
+    // Early application bonus
+    const appDate = new Date(app.applicationDate);
+    const daysSinceApplication = Math.floor((Date.now() - appDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSinceApplication > 60) {
+      priorityScore += 5;
+      factors.push("Early applicant");
+    }
+
+    return {
+      applicationId: app.id,
+      applicationNumber: app.applicationNumber,
+      studentName: `${app.studentFirstName} ${app.studentLastName}`,
+      grade: app.gradeAppliedFor,
+      priorityScore: Math.min(100, priorityScore),
+      waitlistedDate: app.updatedAt?.toString() || app.applicationDate?.toString() || "",
+      factors
+    };
+  }).sort((a, b) => b.priorityScore - a.priorityScore);
 }
