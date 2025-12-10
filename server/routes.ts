@@ -1574,6 +1574,50 @@ export async function registerRoutes(
     }
   });
 
+  // AI Config Endpoint
+  app.get("/api/ai/config", async (req, res) => {
+    try {
+      const { getAIConfig } = await import("./openai");
+      const config = getAIConfig();
+      res.json(config);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Health Endpoint
+  app.get("/api/ai/health", async (req, res) => {
+    try {
+      const { getAIHealthStatus } = await import("./ai-tests");
+      const health = getAIHealthStatus();
+      res.json(health);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Test Suite Endpoint
+  app.get("/api/ai/test", async (req, res) => {
+    try {
+      const { runAITestSuite } = await import("./ai-tests");
+      const results = await runAITestSuite();
+      res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Audit Logs Endpoint
+  app.get("/api/ai/audit-logs", async (req, res) => {
+    try {
+      const { getAIAuditLog } = await import("./openai");
+      const logs = getAIAuditLog();
+      res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   return httpServer;
 }
 
