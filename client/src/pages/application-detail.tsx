@@ -58,7 +58,8 @@ import type {
   AdmissionApplication, 
   ApplicationDocument, 
   ApplicationStatusHistory,
-  ApplicationStatus 
+  ApplicationStatus,
+  ApplicationCommunication 
 } from "@shared/schema";
 import { gradeOptions, applicationStatusEnum, statusLabels, statusColors } from "@shared/schema";
 
@@ -117,9 +118,15 @@ export default function ApplicationDetail() {
   const [selectedDocument, setSelectedDocument] = useState<ApplicationDocument | null>(null);
   const [docVerifyAction, setDocVerifyAction] = useState<"verified" | "rejected">("verified");
   const [docVerifyRemarks, setDocVerifyRemarks] = useState("");
+  const [newNote, setNewNote] = useState({ type: "note" as const, content: "" });
 
   const { data: application, isLoading } = useQuery<ApplicationWithRelations>({
     queryKey: ["/api/admission/applications", params.id],
+  });
+
+  const { data: communications, isLoading: commsLoading } = useQuery<ApplicationCommunication[]>({
+    queryKey: ["/api/admission/applications", params.id, "communications"],
+    enabled: !!params.id,
   });
 
   const statusMutation = useMutation({
@@ -172,6 +179,20 @@ export default function ApplicationDetail() {
     },
     onError: (error: Error) => {
       toast({ title: "Failed to update document", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const addNoteMutation = useMutation({
+    mutationFn: async (data: { type: string; content: string }) => {
+      return apiRequest("POST", `/api/admission/applications/${params.id}/communications`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admission/applications", params.id, "communications"] });
+      setNewNote({ type: "note", content: "" });
+      toast({ title: "Note added successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to add note", description: error.message, variant: "destructive" });
     },
   });
 
@@ -275,10 +296,11 @@ export default function ApplicationDetail() {
           </Card>
 
           <Tabs defaultValue="details" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="details" data-testid="tab-details">Details</TabsTrigger>
               <TabsTrigger value="guardian" data-testid="tab-guardian">Guardian</TabsTrigger>
               <TabsTrigger value="documents" data-testid="tab-documents">Documents</TabsTrigger>
+              <TabsTrigger value="notes" data-testid="tab-notes">Notes</TabsTrigger>
               <TabsTrigger value="history" data-testid="tab-history">History</TabsTrigger>
             </TabsList>
 
@@ -445,6 +467,73 @@ export default function ApplicationDetail() {
                       icon={FileText}
                       title="No Documents Uploaded"
                       description="Documents will appear here once uploaded"
+                    />
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="notes">
+              <Card className="border-card-border">
+                <CardHeader>
+                  <CardTitle className="text-lg font-medium flex items-center gap-2">
+                    <MessageSquare className="h-5 w-5" />
+                    Notes & Communications
+                  </CardTitle>
+                  <CardDescription>Internal notes and communications log</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="rounded-lg border p-4 space-y-3">
+                    <Textarea
+                      value={newNote.content}
+                      onChange={(e) => setNewNote({ ...newNote, content: e.target.value })}
+                      placeholder="Add a note about this application..."
+                      className="resize-none"
+                      rows={3}
+                      data-testid="input-new-note"
+                    />
+                    <Button
+                      onClick={() => addNoteMutation.mutate(newNote)}
+                      disabled={!newNote.content.trim() || addNoteMutation.isPending}
+                      data-testid="button-add-note"
+                    >
+                      {addNoteMutation.isPending ? "Adding..." : "Add Note"}
+                    </Button>
+                  </div>
+
+                  {commsLoading ? (
+                    <div className="space-y-3">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="animate-pulse p-4 rounded-lg border">
+                          <div className="h-4 bg-muted rounded w-1/4 mb-2" />
+                          <div className="h-3 bg-muted rounded w-3/4" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : communications && communications.length > 0 ? (
+                    <div className="space-y-3">
+                      {communications.map((comm) => (
+                        <div key={comm.id} className="p-4 rounded-lg border" data-testid={`note-row-${comm.id}`}>
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <Badge variant="outline" className="text-xs capitalize">
+                              {comm.type}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {format(new Date(comm.createdAt!), "MMM d, yyyy 'at' h:mm a")}
+                            </span>
+                          </div>
+                          <p className="text-sm">{comm.content}</p>
+                          {comm.createdBy && (
+                            <p className="text-xs text-muted-foreground mt-2">By: {comm.createdBy}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState
+                      icon={MessageSquare}
+                      title="No Notes Yet"
+                      description="Add notes to keep track of communications"
                     />
                   )}
                 </CardContent>

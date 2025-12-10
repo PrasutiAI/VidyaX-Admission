@@ -504,5 +504,107 @@ export async function registerRoutes(
     }
   });
 
+  // Notifications
+  app.get("/api/notifications", async (req, res) => {
+    try {
+      const notifications = await storage.getNotifications();
+      res.json(notifications);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/notifications/unread-count", async (req, res) => {
+    try {
+      const count = await storage.getUnreadNotificationsCount();
+      res.json({ count });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/notifications/:id/read", async (req, res) => {
+    try {
+      const notification = await storage.markNotificationRead(req.params.id);
+      if (!notification) {
+        return res.status(404).json({ message: "Notification not found" });
+      }
+      res.json(notification);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/notifications/mark-all-read", async (req, res) => {
+    try {
+      await storage.markAllNotificationsRead();
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Communications/Notes
+  const createCommunicationSchema = z.object({
+    type: z.enum(["call", "email", "meeting", "sms", "note"]),
+    subject: z.string().optional(),
+    content: z.string(),
+    contactPerson: z.string().optional(),
+    createdBy: z.string().optional(),
+  });
+
+  app.get("/api/admission/applications/:id/communications", async (req, res) => {
+    try {
+      const communications = await storage.getApplicationCommunications(req.params.id);
+      res.json(communications);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/admission/applications/:id/communications", async (req, res) => {
+    try {
+      const validation = validateBody(createCommunicationSchema, req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: validation.error });
+      }
+      const communication = await storage.createCommunication({
+        ...validation.data,
+        applicationId: req.params.id,
+      });
+      res.status(201).json(communication);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Analytics
+  app.get("/api/analytics/applications-by-status", async (req, res) => {
+    try {
+      const data = await storage.getApplicationsByStatus();
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/analytics/application-trends", async (req, res) => {
+    try {
+      const data = await storage.getApplicationTrends();
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/analytics/scheduled-events", async (req, res) => {
+    try {
+      const events = await storage.getScheduledEvents();
+      res.json(events);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   return httpServer;
 }
