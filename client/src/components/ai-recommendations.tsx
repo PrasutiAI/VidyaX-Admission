@@ -157,7 +157,7 @@ export function AIRecommendationsPanel({ applicationId }: { applicationId: strin
   });
 
   const { data: prediction, isLoading: predLoading } = useQuery<PredictiveOutcome>({
-    queryKey: ["/api/ai/predictive-score", applicationId],
+    queryKey: ["/api/ai/predictive-outcome", applicationId],
     enabled: !!applicationId,
   });
 
