@@ -943,6 +943,79 @@ export async function registerRoutes(
     }
   });
 
+  // AI Anomaly Detection (v2.5.0)
+  app.get("/api/ai/anomaly-detection", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const applicationsWithDocs = await Promise.all(
+        applications.map(async (app) => {
+          const documents = await storage.getApplicationDocuments(app.id);
+          return { ...app, documents };
+        })
+      );
+      const anomalies = detectAnomalies(applicationsWithDocs);
+      res.json(anomalies);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Trend Forecasting (v2.5.0)
+  app.get("/api/ai/trend-forecast", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const cycles = await storage.getAdmissionCycles();
+      const forecast = generateTrendForecast(applications, cycles);
+      res.json(forecast);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Smart Auto-fill (v2.5.0)
+  app.get("/api/ai/smart-autofill/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplicationWithRelations(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      const autofill = generateSmartAutofill(application);
+      res.json(autofill);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Risk Assessment (v2.5.0)
+  app.get("/api/ai/risk-assessment/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplicationWithRelations(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      const risk = assessApplicationRisk(application);
+      res.json(risk);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Capacity Planning (v2.5.0)
+  app.get("/api/ai/capacity-planning", async (req, res) => {
+    try {
+      const activeCycle = await storage.getActiveAdmissionCycle();
+      if (!activeCycle) {
+        return res.json({ grades: [], overallRecommendation: "No active admission cycle", projectedEnrollment: 0 });
+      }
+      const applications = await storage.getApplications();
+      const seatConfigs = await storage.getSeatConfigurations(activeCycle.id);
+      const planning = generateCapacityPlanning(applications, seatConfigs);
+      res.json(planning);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   return httpServer;
 }
 
@@ -3149,5 +3222,653 @@ function generateDecisionSupport(application: any): DecisionSupport {
     strengths,
     concerns,
     finalRecommendation
+  };
+}
+
+// AI Anomaly Detection (v2.5.0)
+interface AnomalyDetection {
+  anomalies: {
+    type: "data_quality" | "pattern" | "outlier" | "duplicate";
+    severity: "high" | "medium" | "low";
+    applicationId: string;
+    applicationNumber: string;
+    studentName: string;
+    description: string;
+    recommendation: string;
+  }[];
+  summary: string;
+  dataQualityScore: number;
+}
+
+function detectAnomalies(applications: any[]): AnomalyDetection {
+  const anomalies: AnomalyDetection["anomalies"] = [];
+  let qualityIssues = 0;
+  const totalApps = applications.length;
+
+  applications.forEach(app => {
+    const studentName = `${app.studentFirstName} ${app.studentLastName}`;
+    
+    // Data Quality Checks
+    if (!app.dateOfBirth) {
+      anomalies.push({
+        type: "data_quality",
+        severity: "high",
+        applicationId: app.id,
+        applicationNumber: app.applicationNumber,
+        studentName,
+        description: "Missing date of birth - required field",
+        recommendation: "Contact parent to provide date of birth"
+      });
+      qualityIssues++;
+    }
+
+    if (!app.fatherContact && !app.motherContact) {
+      anomalies.push({
+        type: "data_quality",
+        severity: "high",
+        applicationId: app.id,
+        applicationNumber: app.applicationNumber,
+        studentName,
+        description: "No guardian contact information provided",
+        recommendation: "Urgently obtain parent/guardian contact details"
+      });
+      qualityIssues++;
+    }
+
+    // Pattern Anomalies
+    if (app.entranceTestScore && app.interviewScore) {
+      const testScore = parseFloat(app.entranceTestScore);
+      const intScore = parseFloat(app.interviewScore);
+      const diff = Math.abs(testScore - intScore);
+      
+      if (diff > 40) {
+        anomalies.push({
+          type: "pattern",
+          severity: "medium",
+          applicationId: app.id,
+          applicationNumber: app.applicationNumber,
+          studentName,
+          description: `Large discrepancy between test (${testScore}%) and interview (${intScore}%) scores`,
+          recommendation: "Review scores for data entry errors or consider re-evaluation"
+        });
+      }
+    }
+
+    // Outlier Detection
+    if (app.previousMarks) {
+      const marks = parseFloat(app.previousMarks);
+      if (marks > 100 || marks < 0) {
+        anomalies.push({
+          type: "outlier",
+          severity: "high",
+          applicationId: app.id,
+          applicationNumber: app.applicationNumber,
+          studentName,
+          description: `Invalid previous marks value: ${marks}%`,
+          recommendation: "Correct the previous marks data"
+        });
+        qualityIssues++;
+      }
+    }
+
+    // Check for very old pending applications
+    const appDate = new Date(app.applicationDate);
+    const daysSince = Math.floor((Date.now() - appDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSince > 60 && !["enrolled", "rejected", "withdrawn"].includes(app.status)) {
+      anomalies.push({
+        type: "pattern",
+        severity: "medium",
+        applicationId: app.id,
+        applicationNumber: app.applicationNumber,
+        studentName,
+        description: `Application stalled for ${daysSince} days`,
+        recommendation: "Investigate processing delays and take action"
+      });
+    }
+
+    // Document anomalies
+    const documents = app.documents || [];
+    const rejectedDocs = documents.filter((d: any) => d.verificationStatus === "rejected");
+    if (rejectedDocs.length > 2) {
+      anomalies.push({
+        type: "data_quality",
+        severity: "medium",
+        applicationId: app.id,
+        applicationNumber: app.applicationNumber,
+        studentName,
+        description: `Multiple documents rejected (${rejectedDocs.length})`,
+        recommendation: "Verify document authenticity concerns with applicant"
+      });
+    }
+  });
+
+  // Check for potential duplicates by name
+  const nameMap = new Map<string, any[]>();
+  applications.forEach(app => {
+    const fullName = `${app.studentFirstName} ${app.studentLastName}`.toLowerCase();
+    if (!nameMap.has(fullName)) {
+      nameMap.set(fullName, []);
+    }
+    nameMap.get(fullName)!.push(app);
+  });
+
+  nameMap.forEach((apps, name) => {
+    if (apps.length > 1) {
+      apps.forEach(app => {
+        anomalies.push({
+          type: "duplicate",
+          severity: "medium",
+          applicationId: app.id,
+          applicationNumber: app.applicationNumber,
+          studentName: `${app.studentFirstName} ${app.studentLastName}`,
+          description: `Potential duplicate - ${apps.length} applications with same name`,
+          recommendation: "Verify if these are different students or duplicate applications"
+        });
+      });
+    }
+  });
+
+  const dataQualityScore = totalApps > 0 
+    ? Math.max(0, Math.round(100 - (qualityIssues / totalApps) * 100))
+    : 100;
+
+  const highSeverity = anomalies.filter(a => a.severity === "high").length;
+  const summary = anomalies.length === 0 
+    ? "No anomalies detected. Data quality is excellent."
+    : `${anomalies.length} anomalies detected. ${highSeverity} require immediate attention.`;
+
+  return { anomalies, summary, dataQualityScore };
+}
+
+// AI Trend Forecasting (v2.5.0)
+interface TrendForecast {
+  currentPeriod: {
+    applications: number;
+    enrollments: number;
+    conversionRate: number;
+  };
+  forecast: {
+    period: string;
+    expectedApplications: number;
+    expectedEnrollments: number;
+    confidence: number;
+  }[];
+  trends: {
+    metric: string;
+    direction: "up" | "down" | "stable";
+    changePercent: number;
+    insight: string;
+  }[];
+  recommendations: string[];
+}
+
+function generateTrendForecast(applications: any[], cycles: any[]): TrendForecast {
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  
+  // Calculate current period stats
+  const thisMonthApps = applications.filter(app => {
+    const appDate = new Date(app.applicationDate);
+    return appDate.getMonth() === currentMonth && appDate.getFullYear() === now.getFullYear();
+  });
+  
+  const enrolledCount = applications.filter(app => app.status === "enrolled").length;
+  const totalApps = applications.length;
+  const conversionRate = totalApps > 0 ? Math.round((enrolledCount / totalApps) * 100) : 0;
+
+  const currentPeriod = {
+    applications: thisMonthApps.length,
+    enrollments: enrolledCount,
+    conversionRate
+  };
+
+  // Generate forecast for next 3 months
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const forecast: TrendForecast["forecast"] = [];
+  
+  // Simple projection based on current trends
+  const avgMonthlyApps = totalApps > 0 ? Math.round(totalApps / Math.max(1, cycles.length)) : 0;
+  
+  for (let i = 1; i <= 3; i++) {
+    const futureMonth = (currentMonth + i) % 12;
+    const year = now.getFullYear() + Math.floor((currentMonth + i) / 12);
+    
+    // Seasonal adjustment (peak admissions typically in first half of year)
+    let seasonalMultiplier = 1;
+    if (futureMonth >= 0 && futureMonth <= 3) seasonalMultiplier = 1.3; // Peak season
+    else if (futureMonth >= 4 && futureMonth <= 6) seasonalMultiplier = 1.1;
+    else if (futureMonth >= 7 && futureMonth <= 9) seasonalMultiplier = 0.8;
+    else seasonalMultiplier = 0.9;
+
+    const expectedApps = Math.round(avgMonthlyApps * seasonalMultiplier);
+    const expectedEnrollments = Math.round(expectedApps * (conversionRate / 100));
+
+    forecast.push({
+      period: `${monthNames[futureMonth]} ${year}`,
+      expectedApplications: expectedApps,
+      expectedEnrollments: expectedEnrollments,
+      confidence: Math.round(80 - (i * 10)) // Confidence decreases over time
+    });
+  }
+
+  // Analyze trends
+  const trends: TrendForecast["trends"] = [];
+  
+  // Application volume trend
+  const recentApps = applications.filter(app => {
+    const appDate = new Date(app.applicationDate);
+    const daysSince = Math.floor((now.getTime() - appDate.getTime()) / (1000 * 60 * 60 * 24));
+    return daysSince <= 30;
+  }).length;
+  
+  const previousApps = applications.filter(app => {
+    const appDate = new Date(app.applicationDate);
+    const daysSince = Math.floor((now.getTime() - appDate.getTime()) / (1000 * 60 * 60 * 24));
+    return daysSince > 30 && daysSince <= 60;
+  }).length;
+
+  let direction: "up" | "down" | "stable" = "stable";
+  let changePercent = 0;
+  
+  if (previousApps > 0) {
+    changePercent = Math.round(((recentApps - previousApps) / previousApps) * 100);
+    if (changePercent > 10) direction = "up";
+    else if (changePercent < -10) direction = "down";
+  }
+
+  trends.push({
+    metric: "Application Volume",
+    direction,
+    changePercent: Math.abs(changePercent),
+    insight: direction === "up" 
+      ? "Applications increasing - consider preparing for higher volume"
+      : direction === "down"
+        ? "Application volume declining - may need outreach efforts"
+        : "Application volume stable"
+  });
+
+  // Conversion trend
+  const recentEnrolled = applications.filter(app => {
+    const appDate = new Date(app.applicationDate);
+    const daysSince = Math.floor((now.getTime() - appDate.getTime()) / (1000 * 60 * 60 * 24));
+    return daysSince <= 60 && app.status === "enrolled";
+  }).length;
+  
+  const recentTotal = applications.filter(app => {
+    const appDate = new Date(app.applicationDate);
+    const daysSince = Math.floor((now.getTime() - appDate.getTime()) / (1000 * 60 * 60 * 24));
+    return daysSince <= 60;
+  }).length;
+
+  const recentConversion = recentTotal > 0 ? Math.round((recentEnrolled / recentTotal) * 100) : 0;
+  
+  trends.push({
+    metric: "Conversion Rate",
+    direction: recentConversion > conversionRate ? "up" : recentConversion < conversionRate ? "down" : "stable",
+    changePercent: Math.abs(recentConversion - conversionRate),
+    insight: `Recent conversion: ${recentConversion}% vs overall: ${conversionRate}%`
+  });
+
+  // Generate recommendations
+  const recommendations: string[] = [];
+  
+  if (direction === "up") {
+    recommendations.push("Prepare additional screening capacity for expected volume increase");
+  }
+  if (conversionRate < 50) {
+    recommendations.push("Review and optimize admission process to improve conversion rate");
+  }
+  if (forecast.some(f => f.expectedApplications > avgMonthlyApps * 1.2)) {
+    recommendations.push("Peak season approaching - ensure adequate staff and resources");
+  }
+  if (enrolledCount > 0 && totalApps > enrolledCount * 3) {
+    recommendations.push("Large pipeline exists - focus on moving pending applications forward");
+  }
+
+  return { currentPeriod, forecast, trends, recommendations };
+}
+
+// AI Smart Auto-fill (v2.5.0)
+interface SmartAutofill {
+  applicationId: string;
+  suggestions: {
+    field: string;
+    currentValue: string | null;
+    suggestedValue: string;
+    confidence: number;
+    source: string;
+  }[];
+  completenessScore: number;
+  missingFields: string[];
+}
+
+function generateSmartAutofill(application: any): SmartAutofill {
+  const suggestions: SmartAutofill["suggestions"] = [];
+  const missingFields: string[] = [];
+  let completedFields = 0;
+  let totalFields = 0;
+
+  const fieldChecks = [
+    { field: "studentFirstName", label: "Student First Name", value: application.studentFirstName },
+    { field: "studentLastName", label: "Student Last Name", value: application.studentLastName },
+    { field: "dateOfBirth", label: "Date of Birth", value: application.dateOfBirth },
+    { field: "gender", label: "Gender", value: application.gender },
+    { field: "nationality", label: "Nationality", value: application.nationality },
+    { field: "bloodGroup", label: "Blood Group", value: application.bloodGroup },
+    { field: "fatherName", label: "Father's Name", value: application.fatherName },
+    { field: "fatherOccupation", label: "Father's Occupation", value: application.fatherOccupation },
+    { field: "fatherContact", label: "Father's Contact", value: application.fatherContact },
+    { field: "fatherEmail", label: "Father's Email", value: application.fatherEmail },
+    { field: "motherName", label: "Mother's Name", value: application.motherName },
+    { field: "motherOccupation", label: "Mother's Occupation", value: application.motherOccupation },
+    { field: "motherContact", label: "Mother's Contact", value: application.motherContact },
+    { field: "currentAddress", label: "Current Address", value: application.currentAddress },
+    { field: "previousSchoolName", label: "Previous School", value: application.previousSchoolName },
+  ];
+
+  fieldChecks.forEach(({ field, label, value }) => {
+    totalFields++;
+    if (value) {
+      completedFields++;
+    } else {
+      missingFields.push(label);
+    }
+  });
+
+  // Generate smart suggestions for missing fields
+  if (!application.nationality) {
+    suggestions.push({
+      field: "nationality",
+      currentValue: null,
+      suggestedValue: "Indian",
+      confidence: 75,
+      source: "Most common nationality in applications"
+    });
+  }
+
+  if (!application.bloodGroup) {
+    suggestions.push({
+      field: "bloodGroup",
+      currentValue: null,
+      suggestedValue: "O+",
+      confidence: 35,
+      source: "Most common blood group - verification required"
+    });
+  }
+
+  if (application.fatherContact && !application.motherContact) {
+    suggestions.push({
+      field: "motherContact",
+      currentValue: null,
+      suggestedValue: "Same as father's contact",
+      confidence: 50,
+      source: "Common pattern - single contact family"
+    });
+  }
+
+  // Suggest permanent address from current address
+  if (application.currentAddress && !application.permanentAddress) {
+    suggestions.push({
+      field: "permanentAddress",
+      currentValue: null,
+      suggestedValue: application.currentAddress,
+      confidence: 60,
+      source: "Copy from current address"
+    });
+  }
+
+  // Email domain suggestions
+  if (application.fatherContact && !application.fatherEmail) {
+    suggestions.push({
+      field: "fatherEmail",
+      currentValue: null,
+      suggestedValue: "Request email from guardian",
+      confidence: 90,
+      source: "Email required for communications"
+    });
+  }
+
+  const completenessScore = Math.round((completedFields / totalFields) * 100);
+
+  return {
+    applicationId: application.id,
+    suggestions,
+    completenessScore,
+    missingFields
+  };
+}
+
+// AI Risk Assessment (v2.5.0)
+interface RiskAssessment {
+  applicationId: string;
+  applicationNumber: string;
+  studentName: string;
+  overallRiskLevel: "high" | "medium" | "low";
+  riskScore: number;
+  riskFactors: {
+    factor: string;
+    riskLevel: "high" | "medium" | "low";
+    description: string;
+    mitigation: string;
+  }[];
+  recommendation: string;
+}
+
+function assessApplicationRisk(application: any): RiskAssessment {
+  const studentName = `${application.studentFirstName} ${application.studentLastName}`;
+  const riskFactors: RiskAssessment["riskFactors"] = [];
+  let riskScore = 0;
+
+  // Document Risk
+  const documents = application.documents || [];
+  const verifiedDocs = documents.filter((d: any) => d.verificationStatus === "verified").length;
+  const rejectedDocs = documents.filter((d: any) => d.verificationStatus === "rejected").length;
+  
+  if (rejectedDocs > 0) {
+    riskScore += 25;
+    riskFactors.push({
+      factor: "Document Issues",
+      riskLevel: "high",
+      description: `${rejectedDocs} document(s) rejected`,
+      mitigation: "Request re-submission of rejected documents"
+    });
+  } else if (verifiedDocs < 3) {
+    riskScore += 15;
+    riskFactors.push({
+      factor: "Incomplete Documentation",
+      riskLevel: "medium",
+      description: `Only ${verifiedDocs} documents verified`,
+      mitigation: "Follow up for remaining required documents"
+    });
+  }
+
+  // Academic Risk
+  if (application.previousMarks) {
+    const marks = parseFloat(application.previousMarks);
+    if (marks < 40) {
+      riskScore += 20;
+      riskFactors.push({
+        factor: "Academic Performance",
+        riskLevel: "high",
+        description: `Previous marks (${marks}%) below passing threshold`,
+        mitigation: "Consider additional academic support requirements"
+      });
+    } else if (marks < 60) {
+      riskScore += 10;
+      riskFactors.push({
+        factor: "Academic Performance",
+        riskLevel: "medium",
+        description: `Previous marks (${marks}%) below average`,
+        mitigation: "Monitor academic progress after admission"
+      });
+    }
+  }
+
+  // Screening Risk
+  if (application.entranceTestScore) {
+    const testScore = parseFloat(application.entranceTestScore);
+    if (testScore < 35) {
+      riskScore += 20;
+      riskFactors.push({
+        factor: "Entrance Test Performance",
+        riskLevel: "high",
+        description: `Test score (${testScore}%) significantly below standard`,
+        mitigation: "Re-evaluate admission eligibility"
+      });
+    } else if (testScore < 50) {
+      riskScore += 10;
+      riskFactors.push({
+        factor: "Entrance Test Performance",
+        riskLevel: "medium",
+        description: `Test score (${testScore}%) below average`,
+        mitigation: "Consider remedial support if admitted"
+      });
+    }
+  }
+
+  // Process Risk - Application Age
+  const appDate = new Date(application.applicationDate);
+  const daysSince = Math.floor((Date.now() - appDate.getTime()) / (1000 * 60 * 60 * 24));
+  
+  if (daysSince > 45 && !["enrolled", "rejected", "withdrawn"].includes(application.status)) {
+    riskScore += 15;
+    riskFactors.push({
+      factor: "Process Delay",
+      riskLevel: "medium",
+      description: `Application pending for ${daysSince} days`,
+      mitigation: "Expedite processing to prevent dropout"
+    });
+  }
+
+  // Communication Risk
+  if (!application.fatherEmail && !application.motherContact) {
+    riskScore += 15;
+    riskFactors.push({
+      factor: "Communication Gap",
+      riskLevel: "medium",
+      description: "Limited contact information available",
+      mitigation: "Obtain additional contact details"
+    });
+  }
+
+  // Determine overall risk level
+  let overallRiskLevel: RiskAssessment["overallRiskLevel"];
+  if (riskScore >= 50) {
+    overallRiskLevel = "high";
+  } else if (riskScore >= 25) {
+    overallRiskLevel = "medium";
+  } else {
+    overallRiskLevel = "low";
+  }
+
+  let recommendation = "";
+  if (overallRiskLevel === "high") {
+    recommendation = "High-risk application requiring careful review. Address critical factors before proceeding.";
+  } else if (overallRiskLevel === "medium") {
+    recommendation = "Moderate risk factors present. Monitor and address issues proactively.";
+  } else {
+    recommendation = "Low-risk application. Standard processing recommended.";
+  }
+
+  return {
+    applicationId: application.id,
+    applicationNumber: application.applicationNumber,
+    studentName,
+    overallRiskLevel,
+    riskScore: Math.min(100, riskScore),
+    riskFactors,
+    recommendation
+  };
+}
+
+// AI Capacity Planning (v2.5.0)
+interface CapacityPlanning {
+  grades: {
+    gradeId: string;
+    gradeName: string;
+    totalSeats: number;
+    currentOccupancy: number;
+    projectedDemand: number;
+    recommendation: "increase" | "maintain" | "decrease";
+    suggestedSeats: number;
+    reasoning: string;
+  }[];
+  overallRecommendation: string;
+  projectedEnrollment: number;
+}
+
+function generateCapacityPlanning(applications: any[], seatConfigs: any[]): CapacityPlanning {
+  const grades: CapacityPlanning["grades"] = [];
+  let totalProjectedEnrollment = 0;
+
+  // Group applications by grade
+  const appsByGrade = new Map<string, any[]>();
+  applications.forEach(app => {
+    const grade = app.gradeAppliedFor;
+    if (!appsByGrade.has(grade)) {
+      appsByGrade.set(grade, []);
+    }
+    appsByGrade.get(grade)!.push(app);
+  });
+
+  seatConfigs.forEach(config => {
+    const gradeApps = appsByGrade.get(config.gradeId) || [];
+    const enrolled = gradeApps.filter(a => a.status === "enrolled").length;
+    const pending = gradeApps.filter(a => 
+      !["enrolled", "rejected", "withdrawn"].includes(a.status)
+    ).length;
+    
+    // Calculate demand based on applications and pipeline
+    const projectedDemand = enrolled + Math.round(pending * 0.6); // 60% conversion assumption
+    const occupancyRate = (enrolled / config.totalSeats) * 100;
+    const demandRate = (projectedDemand / config.totalSeats) * 100;
+
+    let recommendation: "increase" | "maintain" | "decrease";
+    let suggestedSeats = config.totalSeats;
+    let reasoning = "";
+
+    if (demandRate > 90) {
+      recommendation = "increase";
+      suggestedSeats = Math.ceil(projectedDemand * 1.2);
+      reasoning = `High demand (${Math.round(demandRate)}%) - increase capacity to accommodate waitlist`;
+    } else if (demandRate < 50 && occupancyRate < 50) {
+      recommendation = "decrease";
+      suggestedSeats = Math.max(10, Math.ceil(projectedDemand * 1.1));
+      reasoning = `Low demand (${Math.round(demandRate)}%) - consider reducing capacity`;
+    } else {
+      recommendation = "maintain";
+      suggestedSeats = config.totalSeats;
+      reasoning = `Balanced demand (${Math.round(demandRate)}%) - current capacity adequate`;
+    }
+
+    grades.push({
+      gradeId: config.gradeId,
+      gradeName: config.gradeName,
+      totalSeats: config.totalSeats,
+      currentOccupancy: enrolled,
+      projectedDemand,
+      recommendation,
+      suggestedSeats,
+      reasoning
+    });
+
+    totalProjectedEnrollment += projectedDemand;
+  });
+
+  // Overall recommendation
+  const highDemandGrades = grades.filter(g => g.recommendation === "increase").length;
+  const lowDemandGrades = grades.filter(g => g.recommendation === "decrease").length;
+
+  let overallRecommendation = "Capacity is well-balanced across grades.";
+  if (highDemandGrades > grades.length / 2) {
+    overallRecommendation = "Multiple grades showing high demand. Consider overall capacity expansion.";
+  } else if (lowDemandGrades > grades.length / 2) {
+    overallRecommendation = "Demand is lower than capacity. Focus on marketing and outreach.";
+  }
+
+  return {
+    grades,
+    overallRecommendation,
+    projectedEnrollment: totalProjectedEnrollment
   };
 }

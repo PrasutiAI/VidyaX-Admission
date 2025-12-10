@@ -21,7 +21,7 @@ import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import { DashboardSkeleton } from "@/components/loading-skeleton";
 import { EmptyState } from "@/components/empty-state";
-import { AIDashboardInsights } from "@/components/ai-recommendations";
+import { AIDashboardInsights, AITrendForecast, AIAnomalyDetection, AICapacityPlanning } from "@/components/ai-recommendations";
 import type { AdmissionCycle, AdmissionApplication, GradeSeatConfig } from "@shared/schema";
 import { format } from "date-fns";
 import { gradeOptions } from "@shared/schema";
@@ -127,6 +127,12 @@ export default function Dashboard() {
       </div>
 
       <AIDashboardInsights />
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <AITrendForecast />
+        <AIAnomalyDetection />
+        <AICapacityPlanning />
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card className="border-card-border">

@@ -54,7 +54,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { FormSkeleton } from "@/components/loading-skeleton";
 import { EmptyState } from "@/components/empty-state";
-import { AIRecommendationsPanel } from "@/components/ai-recommendations";
+import { AIRecommendationsPanel, AIRiskAssessment } from "@/components/ai-recommendations";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { 
@@ -617,6 +617,8 @@ export default function ApplicationDetail() {
 
         <div className="space-y-6">
           <AIRecommendationsPanel applicationId={params.id!} />
+          
+          <AIRiskAssessment applicationId={params.id!} />
           
           <Card className="border-card-border">
             <CardHeader>

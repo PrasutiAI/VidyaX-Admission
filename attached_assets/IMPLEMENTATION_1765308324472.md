@@ -17,7 +17,7 @@
 | 2.2.0 | 2025-12-10 | Dashboard AI insights and bulk recommendations | Complete |
 | 2.3.0 | 2025-12-10 | Advanced AI: smart transitions, templates, comparison, deadlines | Complete |
 | 2.4.0 | 2025-12-10 | AI document scoring, interview prep, decision support | Complete |
-| 2.5.0 | 2025-12-10 | AI enhancements: anomaly detection, trend forecasting, smart auto-fill | In Progress |
+| 2.5.0 | 2025-12-10 | AI enhancements: anomaly detection, trend forecasting, smart auto-fill, risk assessment, capacity planning | Complete |
 
 ---
 
