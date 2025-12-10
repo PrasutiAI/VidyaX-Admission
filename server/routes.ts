@@ -817,6 +817,87 @@ export async function registerRoutes(
     }
   });
 
+  // AI Smart Status Transitions
+  app.get("/api/ai/smart-transitions/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplicationWithRelations(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      const transitions = generateSmartStatusTransitions(application);
+      res.json(transitions);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Communication Templates
+  app.get("/api/ai/communication-templates/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplicationWithRelations(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      const templates = generateCommunicationTemplates(application);
+      res.json(templates);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Application Comparison
+  app.post("/api/ai/compare-applications", async (req, res) => {
+    try {
+      const { applicationIds } = req.body;
+      if (!applicationIds || !Array.isArray(applicationIds) || applicationIds.length < 2) {
+        return res.status(400).json({ message: "Provide at least 2 application IDs to compare" });
+      }
+      const applications = await Promise.all(
+        applicationIds.map((id: string) => storage.getApplicationWithRelations(id))
+      );
+      const comparison = compareApplications(applications.filter(Boolean));
+      res.json(comparison);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Deadline Alerts
+  app.get("/api/ai/deadline-alerts", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const alerts = generateDeadlineAlerts(applications);
+      res.json(alerts);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Application Quality Score
+  app.get("/api/ai/quality-score/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplicationWithRelations(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      const qualityScore = calculateApplicationQuality(application);
+      res.json(qualityScore);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Grade-wise Analytics
+  app.get("/api/ai/grade-analytics", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const analytics = generateGradeAnalytics(applications);
+      res.json(analytics);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   return httpServer;
 }
 
@@ -1868,4 +1949,702 @@ function generateBulkRecommendations(applications: any[]): { recommendations: Bu
 
   const totalActions = recommendations.reduce((sum, r) => sum + r.count, 0);
   return { recommendations, totalActions };
+}
+
+// AI Smart Status Transitions
+interface SmartTransition {
+  targetStatus: string;
+  label: string;
+  confidence: number;
+  reasoning: string;
+  requiresInput: boolean;
+  inputFields?: string[];
+}
+
+function generateSmartStatusTransitions(application: any): { transitions: SmartTransition[], currentStatus: string } {
+  const status = application.status;
+  const transitions: SmartTransition[] = [];
+  const documents = application.documents || [];
+  const verifiedDocs = documents.filter((d: any) => d.verificationStatus === "verified").length;
+  const pendingDocs = documents.filter((d: any) => d.verificationStatus === "pending").length;
+
+  switch (status) {
+    case "inquiry":
+      transitions.push({
+        targetStatus: "application_submitted",
+        label: "Submit Application",
+        confidence: 100,
+        reasoning: "Move inquiry to formal application",
+        requiresInput: false
+      });
+      break;
+
+    case "application_submitted":
+      transitions.push({
+        targetStatus: "documents_pending",
+        label: "Request Documents",
+        confidence: 90,
+        reasoning: "Application received, documents needed",
+        requiresInput: false
+      });
+      break;
+
+    case "documents_pending":
+      if (verifiedDocs >= 3 && pendingDocs === 0) {
+        transitions.push({
+          targetStatus: "documents_verified",
+          label: "Mark Documents Verified",
+          confidence: 95,
+          reasoning: `${verifiedDocs} documents verified, no pending`,
+          requiresInput: false
+        });
+      }
+      if (pendingDocs > 0) {
+        transitions.push({
+          targetStatus: "documents_pending",
+          label: "Continue Document Review",
+          confidence: 70,
+          reasoning: `${pendingDocs} documents still pending verification`,
+          requiresInput: false
+        });
+      }
+      break;
+
+    case "documents_verified":
+      transitions.push({
+        targetStatus: "entrance_test_scheduled",
+        label: "Schedule Entrance Test",
+        confidence: 95,
+        reasoning: "Documents complete, ready for testing",
+        requiresInput: true,
+        inputFields: ["testDate"]
+      });
+      break;
+
+    case "entrance_test_scheduled":
+      transitions.push({
+        targetStatus: "entrance_test_completed",
+        label: "Record Test Results",
+        confidence: 90,
+        reasoning: "Test scheduled, ready to record results",
+        requiresInput: true,
+        inputFields: ["score", "testDate"]
+      });
+      break;
+
+    case "entrance_test_completed":
+      const testScore = parseFloat(application.entranceTestScore || "0");
+      if (testScore >= 40) {
+        transitions.push({
+          targetStatus: "interview_scheduled",
+          label: "Schedule Interview",
+          confidence: 90,
+          reasoning: `Passed test with ${testScore}%, ready for interview`,
+          requiresInput: true,
+          inputFields: ["interviewDate"]
+        });
+      } else {
+        transitions.push({
+          targetStatus: "rejected",
+          label: "Reject Application",
+          confidence: 60,
+          reasoning: `Test score ${testScore}% below passing threshold`,
+          requiresInput: true,
+          inputFields: ["remarks"]
+        });
+        transitions.push({
+          targetStatus: "waitlisted",
+          label: "Add to Waitlist",
+          confidence: 40,
+          reasoning: "Consider for waitlist pending seat availability",
+          requiresInput: false
+        });
+      }
+      break;
+
+    case "interview_scheduled":
+      transitions.push({
+        targetStatus: "interview_completed",
+        label: "Record Interview Results",
+        confidence: 90,
+        reasoning: "Interview scheduled, record results",
+        requiresInput: true,
+        inputFields: ["score", "notes"]
+      });
+      break;
+
+    case "interview_completed":
+      const intScore = parseFloat(application.interviewScore || "0");
+      const entScore = parseFloat(application.entranceTestScore || "0");
+      const avgScore = (intScore + entScore) / 2;
+      
+      if (avgScore >= 50) {
+        transitions.push({
+          targetStatus: "offer_extended",
+          label: "Extend Offer",
+          confidence: 85,
+          reasoning: `Combined score ${avgScore.toFixed(1)}% - strong candidate`,
+          requiresInput: false
+        });
+      }
+      transitions.push({
+        targetStatus: "under_review",
+        label: "Send for Review",
+        confidence: 70,
+        reasoning: "Requires additional review before decision",
+        requiresInput: false
+      });
+      if (avgScore < 40) {
+        transitions.push({
+          targetStatus: "rejected",
+          label: "Reject Application",
+          confidence: 60,
+          reasoning: `Low combined score: ${avgScore.toFixed(1)}%`,
+          requiresInput: true,
+          inputFields: ["remarks"]
+        });
+      }
+      break;
+
+    case "under_review":
+      transitions.push({
+        targetStatus: "offer_extended",
+        label: "Extend Offer",
+        confidence: 70,
+        reasoning: "After review, extend admission offer",
+        requiresInput: false
+      });
+      transitions.push({
+        targetStatus: "waitlisted",
+        label: "Add to Waitlist",
+        confidence: 50,
+        reasoning: "Pending seat availability",
+        requiresInput: false
+      });
+      transitions.push({
+        targetStatus: "rejected",
+        label: "Reject Application",
+        confidence: 30,
+        reasoning: "Does not meet requirements",
+        requiresInput: true,
+        inputFields: ["remarks"]
+      });
+      break;
+
+    case "waitlisted":
+      transitions.push({
+        targetStatus: "offer_extended",
+        label: "Extend Offer (Seat Available)",
+        confidence: 60,
+        reasoning: "Seat became available",
+        requiresInput: false
+      });
+      transitions.push({
+        targetStatus: "rejected",
+        label: "Remove from Waitlist",
+        confidence: 30,
+        reasoning: "No seats available this cycle",
+        requiresInput: true,
+        inputFields: ["remarks"]
+      });
+      break;
+
+    case "offer_extended":
+      transitions.push({
+        targetStatus: "offer_accepted",
+        label: "Accept Offer",
+        confidence: 80,
+        reasoning: "Parent/guardian accepts admission offer",
+        requiresInput: false
+      });
+      transitions.push({
+        targetStatus: "withdrawn",
+        label: "Decline Offer",
+        confidence: 20,
+        reasoning: "Parent/guardian declines admission",
+        requiresInput: false
+      });
+      break;
+
+    case "offer_accepted":
+      transitions.push({
+        targetStatus: "enrolled",
+        label: "Complete Enrollment",
+        confidence: 95,
+        reasoning: "Finalize enrollment after fee payment",
+        requiresInput: false
+      });
+      break;
+  }
+
+  return { transitions, currentStatus: status };
+}
+
+// AI Communication Templates
+interface CommunicationTemplate {
+  type: "email" | "sms" | "call";
+  purpose: string;
+  subject: string;
+  content: string;
+  priority: "high" | "medium" | "low";
+}
+
+function generateCommunicationTemplates(application: any): { templates: CommunicationTemplate[] } {
+  const templates: CommunicationTemplate[] = [];
+  const studentName = `${application.studentFirstName} ${application.studentLastName}`;
+  const guardianName = application.fatherName;
+  const status = application.status;
+
+  switch (status) {
+    case "application_submitted":
+      templates.push({
+        type: "email",
+        purpose: "Acknowledge Application",
+        subject: `Application Received - ${application.applicationNumber}`,
+        content: `Dear ${guardianName},\n\nThank you for submitting the admission application for ${studentName}. Your application number is ${application.applicationNumber}.\n\nPlease upload the required documents to proceed with the admission process.\n\nRequired Documents:\n- Birth Certificate\n- Passport Photo\n- Address Proof\n- Previous Report Card (if applicable)\n\nRegards,\nAdmission Office`,
+        priority: "high"
+      });
+      break;
+
+    case "documents_pending":
+      const pendingDocs = (application.documents || []).filter((d: any) => d.verificationStatus === "pending");
+      templates.push({
+        type: "email",
+        purpose: "Document Reminder",
+        subject: `Documents Required - ${application.applicationNumber}`,
+        content: `Dear ${guardianName},\n\nThis is a reminder regarding the pending documents for ${studentName}'s admission application.\n\nPlease ensure all required documents are submitted for verification.\n\nRegards,\nAdmission Office`,
+        priority: "medium"
+      });
+      break;
+
+    case "documents_verified":
+      templates.push({
+        type: "email",
+        purpose: "Test Scheduling",
+        subject: `Entrance Test Scheduled - ${application.applicationNumber}`,
+        content: `Dear ${guardianName},\n\nWe are pleased to inform you that the documents for ${studentName}'s application have been verified.\n\nThe entrance test has been scheduled. Please check the portal for the date and time.\n\nTest Guidelines:\n- Please arrive 15 minutes before the scheduled time\n- Bring a valid ID proof\n- Carry pencils and erasers\n\nRegards,\nAdmission Office`,
+        priority: "high"
+      });
+      break;
+
+    case "entrance_test_completed":
+      const testScore = application.entranceTestScore ? parseFloat(application.entranceTestScore) : 0;
+      templates.push({
+        type: "email",
+        purpose: "Test Results",
+        subject: `Entrance Test Results - ${application.applicationNumber}`,
+        content: `Dear ${guardianName},\n\n${studentName} has completed the entrance test.\n\nScore: ${testScore}%\n\n${testScore >= 40 ? "Congratulations! An interview will be scheduled shortly." : "We will contact you regarding the next steps."}\n\nRegards,\nAdmission Office`,
+        priority: "high"
+      });
+      break;
+
+    case "interview_scheduled":
+      templates.push({
+        type: "email",
+        purpose: "Interview Reminder",
+        subject: `Interview Scheduled - ${application.applicationNumber}`,
+        content: `Dear ${guardianName},\n\nThe interview for ${studentName}'s admission has been scheduled.\n\nPlease ensure both parent/guardian and student are present.\n\nInterview Date: ${application.interviewDate || "To be confirmed"}\n\nRegards,\nAdmission Office`,
+        priority: "high"
+      });
+      templates.push({
+        type: "sms",
+        purpose: "Interview SMS Reminder",
+        subject: "Interview Reminder",
+        content: `Reminder: ${studentName}'s interview for admission is scheduled. Please check your email for details. - Admission Office`,
+        priority: "medium"
+      });
+      break;
+
+    case "offer_extended":
+      templates.push({
+        type: "email",
+        purpose: "Offer Letter",
+        subject: `Admission Offer - ${application.applicationNumber}`,
+        content: `Dear ${guardianName},\n\nCongratulations! We are pleased to offer admission to ${studentName} for Grade ${application.gradeAppliedFor}.\n\nPlease accept this offer and complete the enrollment process within 7 days.\n\nTo accept:\n1. Log in to the admission portal\n2. Accept the offer\n3. Pay the admission fee\n\nWe look forward to welcoming ${studentName} to our school.\n\nRegards,\nAdmission Office`,
+        priority: "high"
+      });
+      break;
+
+    case "offer_accepted":
+      templates.push({
+        type: "email",
+        purpose: "Enrollment Instructions",
+        subject: `Complete Enrollment - ${application.applicationNumber}`,
+        content: `Dear ${guardianName},\n\nThank you for accepting the admission offer for ${studentName}.\n\nTo complete the enrollment:\n1. Pay the admission fee\n2. Submit original documents for verification\n3. Collect the admission kit\n\nWe look forward to seeing ${studentName} on the first day of school.\n\nRegards,\nAdmission Office`,
+        priority: "high"
+      });
+      break;
+
+    case "enrolled":
+      templates.push({
+        type: "email",
+        purpose: "Welcome Email",
+        subject: `Welcome to Our School - ${studentName}`,
+        content: `Dear ${guardianName},\n\nCongratulations on ${studentName}'s enrollment!\n\nWe are excited to welcome ${studentName} to Grade ${application.gradeAppliedFor}.\n\nImportant Information:\n- School starts on [Start Date]\n- Orientation will be held on [Orientation Date]\n- Uniform and books list will be shared separately\n\nWelcome to our school family!\n\nRegards,\nAdmission Office`,
+        priority: "medium"
+      });
+      break;
+
+    case "rejected":
+      templates.push({
+        type: "email",
+        purpose: "Rejection Notification",
+        subject: `Application Status - ${application.applicationNumber}`,
+        content: `Dear ${guardianName},\n\nThank you for your interest in our school and for applying for ${studentName}'s admission.\n\nAfter careful consideration, we regret to inform you that we are unable to offer admission at this time.\n\n${application.decisionRemarks ? `Reason: ${application.decisionRemarks}` : ""}\n\nWe encourage you to apply again in the next admission cycle.\n\nRegards,\nAdmission Office`,
+        priority: "medium"
+      });
+      break;
+  }
+
+  return { templates };
+}
+
+// AI Application Comparison
+interface ApplicationComparison {
+  applications: {
+    id: string;
+    applicationNumber: string;
+    studentName: string;
+    grade: string;
+    status: string;
+    scores: {
+      eligibility: number;
+      entranceTest: number | null;
+      interview: number | null;
+      documentCompleteness: number;
+    };
+  }[];
+  winner: string | null;
+  analysis: string;
+}
+
+function compareApplications(applications: any[]): ApplicationComparison {
+  const comparedApps = applications.map(app => {
+    const documents = app.documents || [];
+    const verifiedDocs = documents.filter((d: any) => d.verificationStatus === "verified").length;
+    const docCompleteness = Math.round((verifiedDocs / 5) * 100);
+    
+    const entranceTest = app.entranceTestScore ? parseFloat(app.entranceTestScore) : null;
+    const interview = app.interviewScore ? parseFloat(app.interviewScore) : null;
+    
+    let eligibility = 30 + docCompleteness * 0.2;
+    if (entranceTest) eligibility += entranceTest * 0.3;
+    if (interview) eligibility += interview * 0.2;
+    if (app.previousMarks) eligibility += parseFloat(app.previousMarks) * 0.1;
+    
+    return {
+      id: app.id,
+      applicationNumber: app.applicationNumber,
+      studentName: `${app.studentFirstName} ${app.studentLastName}`,
+      grade: app.gradeAppliedFor,
+      status: app.status,
+      scores: {
+        eligibility: Math.min(100, Math.round(eligibility)),
+        entranceTest,
+        interview,
+        documentCompleteness: docCompleteness
+      }
+    };
+  });
+
+  const sorted = [...comparedApps].sort((a, b) => b.scores.eligibility - a.scores.eligibility);
+  const winner = sorted.length > 0 ? sorted[0].id : null;
+  
+  let analysis = "Comparison complete. ";
+  if (sorted.length >= 2) {
+    const diff = sorted[0].scores.eligibility - sorted[1].scores.eligibility;
+    if (diff > 20) {
+      analysis += `${sorted[0].studentName} is clearly the stronger candidate with ${diff}% higher eligibility score.`;
+    } else if (diff > 10) {
+      analysis += `${sorted[0].studentName} has a moderate advantage with ${diff}% higher eligibility.`;
+    } else {
+      analysis += `Both candidates are closely matched. Consider other factors.`;
+    }
+  }
+
+  return {
+    applications: comparedApps,
+    winner,
+    analysis
+  };
+}
+
+// AI Deadline Alerts
+interface DeadlineAlert {
+  type: "overdue" | "due_soon" | "reminder";
+  applicationId: string;
+  applicationNumber: string;
+  studentName: string;
+  deadline: string;
+  daysRemaining: number;
+  action: string;
+}
+
+function generateDeadlineAlerts(applications: any[]): { alerts: DeadlineAlert[], summary: string } {
+  const alerts: DeadlineAlert[] = [];
+  const now = new Date();
+
+  applications.forEach(app => {
+    const appDate = new Date(app.applicationDate);
+    const daysSince = Math.floor((now.getTime() - appDate.getTime()) / (1000 * 60 * 60 * 24));
+    const studentName = `${app.studentFirstName} ${app.studentLastName}`;
+
+    if (app.status === "documents_pending" && daysSince > 14) {
+      alerts.push({
+        type: daysSince > 21 ? "overdue" : "due_soon",
+        applicationId: app.id,
+        applicationNumber: app.applicationNumber,
+        studentName,
+        deadline: "Document submission",
+        daysRemaining: -(daysSince - 14),
+        action: "Request documents urgently"
+      });
+    }
+
+    if (app.status === "offer_extended") {
+      const offerDate = app.decisionDate ? new Date(app.decisionDate) : appDate;
+      const daysSinceOffer = Math.floor((now.getTime() - offerDate.getTime()) / (1000 * 60 * 60 * 24));
+      const daysRemaining = 7 - daysSinceOffer;
+      
+      if (daysRemaining <= 3) {
+        alerts.push({
+          type: daysRemaining <= 0 ? "overdue" : "due_soon",
+          applicationId: app.id,
+          applicationNumber: app.applicationNumber,
+          studentName,
+          deadline: "Offer acceptance",
+          daysRemaining,
+          action: daysRemaining <= 0 ? "Follow up immediately" : "Send reminder"
+        });
+      }
+    }
+
+    if (app.status === "entrance_test_scheduled" && app.entranceTestDate) {
+      const testDate = new Date(app.entranceTestDate);
+      const daysUntilTest = Math.floor((testDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (daysUntilTest <= 3 && daysUntilTest >= 0) {
+        alerts.push({
+          type: "reminder",
+          applicationId: app.id,
+          applicationNumber: app.applicationNumber,
+          studentName,
+          deadline: "Entrance test",
+          daysRemaining: daysUntilTest,
+          action: "Confirm test attendance"
+        });
+      }
+    }
+
+    if (app.status === "interview_scheduled" && app.interviewDate) {
+      const intDate = new Date(app.interviewDate);
+      const daysUntilInt = Math.floor((intDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (daysUntilInt <= 3 && daysUntilInt >= 0) {
+        alerts.push({
+          type: "reminder",
+          applicationId: app.id,
+          applicationNumber: app.applicationNumber,
+          studentName,
+          deadline: "Interview",
+          daysRemaining: daysUntilInt,
+          action: "Confirm interview attendance"
+        });
+      }
+    }
+  });
+
+  alerts.sort((a, b) => a.daysRemaining - b.daysRemaining);
+  
+  const overdueCount = alerts.filter(a => a.type === "overdue").length;
+  const dueSoonCount = alerts.filter(a => a.type === "due_soon").length;
+  
+  let summary = "No immediate deadlines.";
+  if (overdueCount > 0) {
+    summary = `${overdueCount} overdue item(s) require immediate attention!`;
+  } else if (dueSoonCount > 0) {
+    summary = `${dueSoonCount} deadline(s) coming up soon.`;
+  }
+
+  return { alerts, summary };
+}
+
+// AI Application Quality Score
+interface QualityScore {
+  overallQuality: number;
+  grade: "A" | "B" | "C" | "D" | "F";
+  breakdown: {
+    category: string;
+    score: number;
+    maxScore: number;
+    feedback: string;
+  }[];
+  improvements: string[];
+}
+
+function calculateApplicationQuality(application: any): QualityScore {
+  const breakdown: { category: string; score: number; maxScore: number; feedback: string }[] = [];
+  const improvements: string[] = [];
+  const documents = application.documents || [];
+
+  // Information Completeness (30 points)
+  let infoScore = 10;
+  if (application.studentFirstName && application.studentLastName) infoScore += 5;
+  if (application.dateOfBirth) infoScore += 3;
+  if (application.fatherName && application.fatherContact && application.fatherEmail) infoScore += 5;
+  if (application.motherName) infoScore += 3;
+  if (application.currentAddress) infoScore += 4;
+  breakdown.push({
+    category: "Information Completeness",
+    score: Math.min(30, infoScore),
+    maxScore: 30,
+    feedback: infoScore >= 25 ? "Complete profile" : "Some information missing"
+  });
+  if (infoScore < 25) improvements.push("Complete all guardian contact details");
+
+  // Document Quality (30 points)
+  const verifiedDocs = documents.filter((d: any) => d.verificationStatus === "verified").length;
+  const docScore = Math.min(30, verifiedDocs * 6);
+  breakdown.push({
+    category: "Document Quality",
+    score: docScore,
+    maxScore: 30,
+    feedback: `${verifiedDocs}/5 required documents verified`
+  });
+  if (verifiedDocs < 5) improvements.push("Upload and verify all required documents");
+
+  // Academic Profile (20 points)
+  let academicScore = 10;
+  if (application.previousSchoolName) academicScore += 5;
+  if (application.previousMarks) {
+    const marks = parseFloat(application.previousMarks);
+    if (marks >= 75) academicScore += 5;
+    else if (marks >= 50) academicScore += 3;
+  }
+  breakdown.push({
+    category: "Academic Profile",
+    score: Math.min(20, academicScore),
+    maxScore: 20,
+    feedback: application.previousMarks ? `Previous marks: ${application.previousMarks}%` : "No previous academic record"
+  });
+  if (!application.previousMarks) improvements.push("Provide previous academic records");
+
+  // Screening Completion (20 points)
+  let screeningScore = 0;
+  if (application.entranceTestScore) {
+    const testScore = parseFloat(application.entranceTestScore);
+    screeningScore += testScore >= 40 ? 10 : 5;
+  }
+  if (application.interviewScore) {
+    const intScore = parseFloat(application.interviewScore);
+    screeningScore += intScore >= 40 ? 10 : 5;
+  }
+  breakdown.push({
+    category: "Screening Completion",
+    score: Math.min(20, screeningScore),
+    maxScore: 20,
+    feedback: screeningScore === 20 ? "All screenings complete" : "Screenings pending"
+  });
+  if (screeningScore < 20) improvements.push("Complete entrance test and interview");
+
+  const overallQuality = breakdown.reduce((sum, b) => sum + b.score, 0);
+  
+  let grade: "A" | "B" | "C" | "D" | "F";
+  if (overallQuality >= 90) grade = "A";
+  else if (overallQuality >= 75) grade = "B";
+  else if (overallQuality >= 60) grade = "C";
+  else if (overallQuality >= 45) grade = "D";
+  else grade = "F";
+
+  return { overallQuality, grade, breakdown, improvements };
+}
+
+// AI Grade-wise Analytics
+interface GradeAnalytics {
+  grades: {
+    gradeId: string;
+    gradeName: string;
+    totalApplications: number;
+    enrolled: number;
+    rejected: number;
+    pending: number;
+    conversionRate: number;
+    avgEntranceScore: number | null;
+    avgInterviewScore: number | null;
+    competitionLevel: "high" | "medium" | "low";
+  }[];
+  summary: string;
+  insights: string[];
+}
+
+function generateGradeAnalytics(applications: any[]): GradeAnalytics {
+  const gradeMap = new Map<string, any[]>();
+  
+  applications.forEach(app => {
+    const grade = app.gradeAppliedFor;
+    if (!gradeMap.has(grade)) {
+      gradeMap.set(grade, []);
+    }
+    gradeMap.get(grade)!.push(app);
+  });
+
+  const grades = Array.from(gradeMap.entries()).map(([gradeId, apps]) => {
+    const enrolled = apps.filter(a => a.status === "enrolled").length;
+    const rejected = apps.filter(a => a.status === "rejected").length;
+    const pending = apps.filter(a => !["enrolled", "rejected", "withdrawn"].includes(a.status)).length;
+    
+    const entranceScores = apps
+      .filter(a => a.entranceTestScore)
+      .map(a => parseFloat(a.entranceTestScore));
+    const avgEntranceScore = entranceScores.length > 0 
+      ? Math.round(entranceScores.reduce((a, b) => a + b, 0) / entranceScores.length)
+      : null;
+
+    const interviewScores = apps
+      .filter(a => a.interviewScore)
+      .map(a => parseFloat(a.interviewScore));
+    const avgInterviewScore = interviewScores.length > 0
+      ? Math.round(interviewScores.reduce((a, b) => a + b, 0) / interviewScores.length)
+      : null;
+
+    const conversionRate = apps.length > 0 ? Math.round((enrolled / apps.length) * 100) : 0;
+    
+    let competitionLevel: "high" | "medium" | "low" = "low";
+    if (apps.length > 20) competitionLevel = "high";
+    else if (apps.length > 10) competitionLevel = "medium";
+
+    return {
+      gradeId,
+      gradeName: gradeId.charAt(0).toUpperCase() + gradeId.slice(1).replace(/(\d+)/g, " $1"),
+      totalApplications: apps.length,
+      enrolled,
+      rejected,
+      pending,
+      conversionRate,
+      avgEntranceScore,
+      avgInterviewScore,
+      competitionLevel
+    };
+  }).sort((a, b) => b.totalApplications - a.totalApplications);
+
+  const insights: string[] = [];
+  const highCompetition = grades.filter(g => g.competitionLevel === "high");
+  if (highCompetition.length > 0) {
+    insights.push(`High competition in: ${highCompetition.map(g => g.gradeName).join(", ")}`);
+  }
+
+  const lowConversion = grades.filter(g => g.conversionRate < 30 && g.totalApplications > 5);
+  if (lowConversion.length > 0) {
+    insights.push(`Low conversion rates in: ${lowConversion.map(g => g.gradeName).join(", ")}`);
+  }
+
+  const totalApps = applications.length;
+  const totalEnrolled = grades.reduce((sum, g) => sum + g.enrolled, 0);
+  const overallRate = totalApps > 0 ? Math.round((totalEnrolled / totalApps) * 100) : 0;
+
+  return {
+    grades,
+    summary: `${grades.length} grades with ${totalApps} total applications, ${overallRate}% overall conversion`,
+    insights
+  };
 }
