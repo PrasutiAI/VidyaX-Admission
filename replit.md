@@ -1,8 +1,20 @@
 # Student Admission Management Service
 
+**Current Version: 2.4.0** (December 2025)
+
 ## Overview
 
 This project is a full-stack TypeScript application designed to manage the entire student admission lifecycle, from initial inquiry to final enrollment. It features a React frontend and an Express.js backend, providing an administrative dashboard for managing admission cycles, student applications, seat configurations, and document tracking. A key aspect of the system is its "AI-first" approach, incorporating intelligent features such as AI-powered recommendations, eligibility scoring, predictive analytics for admission outcomes, and smart waitlist prioritization to assist in decision-making and streamline the admission process. The system aims to enhance efficiency and provide data-driven insights for admission management.
+
+## Version History
+
+| Version | Changes |
+|---------|---------|
+| 1.0.0 | Initial service architecture and data models |
+| 1.5.0 | Core features: cycles, applications, documents, screening, enrollment, reports |
+| 2.0.0 | AI-First Features: recommendations, eligibility scoring, predictive analytics |
+| 2.3.0 | Advanced AI: smart transitions, templates, comparison, deadlines |
+| 2.4.0 | AI document batch scoring, interview preparation, decision support |
 
 ## User Preferences
 
@@ -27,13 +39,24 @@ The system encompasses a comprehensive set of features, including:
 - **Reporting**: Five types of reports including application summaries and enrollment statistics.
 - **Notifications**: Real-time alerts for status changes and events.
 - **Communications**: Tracking of interactions (calls, emails, meetings, SMS, notes) with applicants.
-- **AI Features**:
+- **AI Features** (17 implemented):
     - **Smart Recommendations**: Context-aware suggestions based on application status, documents, screening results, and seat availability.
     - **Eligibility Scoring**: A multi-factor system (0-100 points) based on age, document completion, entrance test, and interview performance, with confidence levels (High, Medium, Low).
     - **Document Suggestions**: Intelligent tracking of required, recommended, and optional documents with verification status.
     - **Waitlist Prioritization**: Scoring factors include test performance, interview performance, academic record, and early application bonus.
-    - **Predictive Analytics**: Forecasting admission outcomes.
+    - **Predictive Analytics**: Forecasting admission outcomes with contributing factors.
     - **Auto-Suggest Next Steps**: Context-aware action recommendations.
+    - **Dashboard Insights**: System-wide AI insights and alerts.
+    - **Bulk Recommendations**: Batch processing suggestions for similar applications.
+    - **Smart Status Transitions**: AI-suggested next status with confidence scores.
+    - **Communication Templates**: Auto-generated email/SMS templates based on status.
+    - **Application Comparison**: Compare and score multiple applications.
+    - **Deadline Alerts**: Intelligent deadline tracking and notifications.
+    - **Quality Score**: Application completeness scoring (Grade A-F).
+    - **Grade Analytics**: AI-powered grade-wise analysis.
+    - **Document Batch Scoring**: AI scores for batch document verification.
+    - **Interview Preparation**: AI-generated interview questions and tips.
+    - **Decision Support**: AI reasoning for admission decisions with strengths/concerns.
 
 ### System Design Choices
 - **Frontend Framework**: React 18 with TypeScript for a dynamic user interface.
