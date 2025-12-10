@@ -496,30 +496,66 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getEnrollmentReport(): Promise<any> {
-    const enrolled = await db.select()
-      .from(admissionApplications)
-      .where(eq(admissionApplications.status, "enrolled"))
-      .orderBy(desc(admissionApplications.updatedAt));
+    // Get active admission cycle to scope the report
+    const activeCycle = await this.getActiveAdmissionCycle();
+    
+    // Build enrolled query - filtered by active cycle if available
+    const enrolledQuery = activeCycle
+      ? db.select()
+          .from(admissionApplications)
+          .where(and(
+            eq(admissionApplications.status, "enrolled"),
+            eq(admissionApplications.admissionCycleId, activeCycle.id)
+          ))
+          .orderBy(desc(admissionApplications.updatedAt))
+      : db.select()
+          .from(admissionApplications)
+          .where(eq(admissionApplications.status, "enrolled"))
+          .orderBy(desc(admissionApplications.updatedAt));
+    
+    const enrolled = await enrolledQuery;
 
-    // Get enrolled count per grade
-    const enrolledByGrade = await db.select({
-      grade: admissionApplications.gradeAppliedFor,
-      count: sql<number>`count(*)`,
-    })
-      .from(admissionApplications)
-      .where(eq(admissionApplications.status, "enrolled"))
-      .groupBy(admissionApplications.gradeAppliedFor);
+    // Get enrolled count per grade (scoped to active cycle)
+    const enrolledByGradeQuery = activeCycle
+      ? db.select({
+          grade: admissionApplications.gradeAppliedFor,
+          count: sql<number>`count(*)`,
+        })
+          .from(admissionApplications)
+          .where(and(
+            eq(admissionApplications.status, "enrolled"),
+            eq(admissionApplications.admissionCycleId, activeCycle.id)
+          ))
+          .groupBy(admissionApplications.gradeAppliedFor)
+      : db.select({
+          grade: admissionApplications.gradeAppliedFor,
+          count: sql<number>`count(*)`,
+        })
+          .from(admissionApplications)
+          .where(eq(admissionApplications.status, "enrolled"))
+          .groupBy(admissionApplications.gradeAppliedFor);
+    
+    const enrolledByGrade = await enrolledByGradeQuery;
 
-    // Get total applications per grade (all statuses)
-    const totalByGrade = await db.select({
-      grade: admissionApplications.gradeAppliedFor,
-      count: sql<number>`count(*)`,
-    })
-      .from(admissionApplications)
-      .groupBy(admissionApplications.gradeAppliedFor);
+    // Get total applications per grade (scoped to active cycle)
+    const totalByGradeQuery = activeCycle
+      ? db.select({
+          grade: admissionApplications.gradeAppliedFor,
+          count: sql<number>`count(*)`,
+        })
+          .from(admissionApplications)
+          .where(eq(admissionApplications.admissionCycleId, activeCycle.id))
+          .groupBy(admissionApplications.gradeAppliedFor)
+      : db.select({
+          grade: admissionApplications.gradeAppliedFor,
+          count: sql<number>`count(*)`,
+        })
+          .from(admissionApplications)
+          .groupBy(admissionApplications.gradeAppliedFor);
+    
+    const totalByGrade = await totalByGradeQuery;
 
     // Merge enrolled and total counts per grade
-    const totalMap = new Map(totalByGrade.map(g => [g.grade, Number(g.count)]));
     const byGrade = totalByGrade.map(g => ({
       grade: g.grade,
       enrolled: enrolledByGrade.find(e => e.grade === g.grade)?.count || 0,
