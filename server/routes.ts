@@ -898,6 +898,51 @@ export async function registerRoutes(
     }
   });
 
+  // AI Document Batch Scoring
+  app.get("/api/ai/document-batch-score", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const applicationsWithDocs = await Promise.all(
+        applications.map(async (app) => {
+          const documents = await storage.getApplicationDocuments(app.id);
+          return { ...app, documents };
+        })
+      );
+      const batchScores = generateDocumentBatchScores(applicationsWithDocs);
+      res.json(batchScores);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Interview Preparation
+  app.get("/api/ai/interview-preparation/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplicationWithRelations(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      const preparation = generateInterviewPreparation(application);
+      res.json(preparation);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Decision Support
+  app.get("/api/ai/decision-support/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplicationWithRelations(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      const decision = generateDecisionSupport(application);
+      res.json(decision);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   return httpServer;
 }
 
@@ -2679,5 +2724,430 @@ function generateGradeAnalytics(applications: any[]): GradeAnalytics {
     grades,
     summary: `${grades.length} grades with ${totalApps} total applications, ${overallRate}% overall conversion`,
     insights
+  };
+}
+
+// AI Document Batch Scoring
+interface DocumentBatchScore {
+  applicationId: string;
+  applicationNumber: string;
+  studentName: string;
+  documentScore: number;
+  documentsAnalysis: {
+    total: number;
+    verified: number;
+    pending: number;
+    rejected: number;
+    missingRequired: string[];
+  };
+  recommendation: string;
+  priority: "high" | "medium" | "low";
+}
+
+function generateDocumentBatchScores(applications: any[]): { scores: DocumentBatchScore[], summary: string } {
+  const requiredDocs = ["birth_certificate", "passport_photo", "address_proof"];
+  
+  const scores = applications
+    .filter(app => app.status === "documents_pending" || app.status === "application_submitted")
+    .map(app => {
+      const documents = app.documents || [];
+      const total = documents.length;
+      const verified = documents.filter((d: any) => d.verificationStatus === "verified").length;
+      const pending = documents.filter((d: any) => d.verificationStatus === "pending").length;
+      const rejected = documents.filter((d: any) => d.verificationStatus === "rejected").length;
+      
+      const uploadedTypes = documents.map((d: any) => d.documentType);
+      const missingRequired = requiredDocs.filter(doc => !uploadedTypes.includes(doc));
+      
+      let documentScore = 0;
+      if (total > 0) {
+        documentScore += Math.min(30, (total / 5) * 30);
+        documentScore += (verified / Math.max(1, total)) * 40;
+        documentScore -= rejected * 10;
+        if (missingRequired.length === 0) documentScore += 20;
+        else documentScore -= missingRequired.length * 5;
+      }
+      documentScore = Math.max(0, Math.min(100, Math.round(documentScore)));
+      
+      let recommendation = "";
+      let priority: "high" | "medium" | "low" = "medium";
+      
+      if (missingRequired.length > 0) {
+        recommendation = `Missing ${missingRequired.length} required document(s). Request submission.`;
+        priority = "high";
+      } else if (pending > 0) {
+        recommendation = `${pending} document(s) pending verification. Review now.`;
+        priority = pending > 2 ? "high" : "medium";
+      } else if (rejected > 0) {
+        recommendation = `${rejected} document(s) rejected. Request re-submission.`;
+        priority = "high";
+      } else if (verified === total && total >= 3) {
+        recommendation = "All documents verified. Ready for next stage.";
+        priority = "low";
+      } else {
+        recommendation = "Request additional documents to strengthen application.";
+        priority = "medium";
+      }
+      
+      return {
+        applicationId: app.id,
+        applicationNumber: app.applicationNumber,
+        studentName: `${app.studentFirstName} ${app.studentLastName}`,
+        documentScore,
+        documentsAnalysis: {
+          total,
+          verified,
+          pending,
+          rejected,
+          missingRequired
+        },
+        recommendation,
+        priority
+      };
+    })
+    .sort((a, b) => {
+      const priorityOrder = { high: 0, medium: 1, low: 2 };
+      return priorityOrder[a.priority] - priorityOrder[b.priority];
+    });
+  
+  const highPriority = scores.filter(s => s.priority === "high").length;
+  const summary = `${scores.length} applications need document review. ${highPriority} require immediate attention.`;
+  
+  return { scores, summary };
+}
+
+// AI Interview Preparation
+interface InterviewPreparation {
+  applicationId: string;
+  studentName: string;
+  grade: string;
+  suggestedQuestions: {
+    category: string;
+    question: string;
+    purpose: string;
+  }[];
+  focusAreas: string[];
+  redFlags: string[];
+  tips: string[];
+}
+
+function generateInterviewPreparation(application: any): InterviewPreparation {
+  const studentName = `${application.studentFirstName} ${application.studentLastName}`;
+  const grade = application.gradeAppliedFor;
+  const entranceScore = application.entranceTestScore ? parseFloat(application.entranceTestScore) : null;
+  const previousMarks = application.previousMarks ? parseFloat(application.previousMarks) : null;
+  
+  const suggestedQuestions: InterviewPreparation["suggestedQuestions"] = [];
+  const focusAreas: string[] = [];
+  const redFlags: string[] = [];
+  const tips: string[] = [];
+  
+  // Basic questions for all applicants
+  suggestedQuestions.push({
+    category: "Introduction",
+    question: "Tell us about yourself and why you want to join our school.",
+    purpose: "Assess communication skills and motivation"
+  });
+  
+  suggestedQuestions.push({
+    category: "Academic Interest",
+    question: "What is your favorite subject and why?",
+    purpose: "Understand academic interests and enthusiasm"
+  });
+  
+  // Grade-specific questions
+  if (grade.includes("grade1") || grade === "lkg" || grade === "ukg" || grade === "nursery") {
+    suggestedQuestions.push({
+      category: "Readiness",
+      question: "Can you tell us about your daily routine at home?",
+      purpose: "Assess school readiness and routine familiarity"
+    });
+    focusAreas.push("Social interaction skills", "Basic motor skills", "Following simple instructions");
+    tips.push("Keep questions simple and engaging for young children");
+    tips.push("Observe body language and comfort level");
+  } else {
+    suggestedQuestions.push({
+      category: "Problem Solving",
+      question: "Describe a challenging situation you faced and how you handled it.",
+      purpose: "Evaluate problem-solving and resilience"
+    });
+    suggestedQuestions.push({
+      category: "Goals",
+      question: "What are your goals for the next academic year?",
+      purpose: "Assess maturity and future orientation"
+    });
+  }
+  
+  // Entrance test based questions
+  if (entranceScore !== null) {
+    if (entranceScore < 50) {
+      suggestedQuestions.push({
+        category: "Academic Support",
+        question: "What areas do you find difficult in your studies? How do you plan to improve?",
+        purpose: "Understand awareness of weaknesses and improvement mindset"
+      });
+      focusAreas.push("Learning ability and willingness to improve");
+      redFlags.push(`Entrance test score (${entranceScore}%) below average - assess learning potential`);
+    } else if (entranceScore >= 80) {
+      suggestedQuestions.push({
+        category: "Excellence",
+        question: "What extracurricular activities are you interested in?",
+        purpose: "Explore well-roundedness beyond academics"
+      });
+      focusAreas.push("Leadership potential", "Extracurricular interests");
+    }
+  }
+  
+  // Previous academic record
+  if (previousMarks !== null && previousMarks < 50) {
+    redFlags.push(`Previous marks (${previousMarks}%) are low - verify reasons`);
+    suggestedQuestions.push({
+      category: "Academic History",
+      question: "Were there any challenges that affected your previous academic performance?",
+      purpose: "Understand context behind lower grades"
+    });
+  }
+  
+  // Previous school transfer
+  if (application.previousSchoolName) {
+    suggestedQuestions.push({
+      category: "Transition",
+      question: "Why are you leaving your current school?",
+      purpose: "Understand reasons for transfer and expectations"
+    });
+    focusAreas.push("Reason for school change");
+  }
+  
+  // Parent interaction
+  suggestedQuestions.push({
+    category: "Parent Discussion",
+    question: "(For parents) How do you support your child's education at home?",
+    purpose: "Assess parental involvement and support system"
+  });
+  
+  suggestedQuestions.push({
+    category: "Parent Discussion",
+    question: "(For parents) What are your expectations from our school?",
+    purpose: "Align expectations and school offerings"
+  });
+  
+  // General tips
+  tips.push("Allow the student to answer before parents intervene");
+  tips.push("Create a comfortable atmosphere to reduce nervousness");
+  tips.push("Note both verbal responses and non-verbal cues");
+  tips.push("Give opportunity for the family to ask questions");
+  
+  return {
+    applicationId: application.id,
+    studentName,
+    grade,
+    suggestedQuestions,
+    focusAreas,
+    redFlags,
+    tips
+  };
+}
+
+// AI Decision Support
+interface DecisionSupport {
+  applicationId: string;
+  applicationNumber: string;
+  studentName: string;
+  recommendedDecision: "admit" | "waitlist" | "reject" | "needs_review";
+  confidenceScore: number;
+  reasoning: {
+    category: string;
+    assessment: string;
+    impact: "positive" | "negative" | "neutral";
+    score: number;
+  }[];
+  strengths: string[];
+  concerns: string[];
+  finalRecommendation: string;
+}
+
+function generateDecisionSupport(application: any): DecisionSupport {
+  const studentName = `${application.studentFirstName} ${application.studentLastName}`;
+  const reasoning: DecisionSupport["reasoning"] = [];
+  const strengths: string[] = [];
+  const concerns: string[] = [];
+  let totalScore = 0;
+  let maxScore = 0;
+  
+  // Document Assessment (20 points)
+  maxScore += 20;
+  const documents = application.documents || [];
+  const verifiedDocs = documents.filter((d: any) => d.verificationStatus === "verified").length;
+  const rejectedDocs = documents.filter((d: any) => d.verificationStatus === "rejected").length;
+  let docScore = 0;
+  
+  if (verifiedDocs >= 4) {
+    docScore = 20;
+    strengths.push("Complete and verified documentation");
+  } else if (verifiedDocs >= 3) {
+    docScore = 15;
+    strengths.push("Good documentation with most required documents verified");
+  } else if (verifiedDocs >= 1) {
+    docScore = 10;
+  } else {
+    docScore = 5;
+    concerns.push("Limited documentation submitted");
+  }
+  
+  if (rejectedDocs > 0) {
+    docScore -= 5;
+    concerns.push(`${rejectedDocs} document(s) were rejected`);
+  }
+  totalScore += docScore;
+  
+  reasoning.push({
+    category: "Documentation",
+    assessment: `${verifiedDocs} verified, ${rejectedDocs} rejected documents`,
+    impact: docScore >= 15 ? "positive" : docScore >= 10 ? "neutral" : "negative",
+    score: docScore
+  });
+  
+  // Entrance Test Assessment (30 points)
+  maxScore += 30;
+  let testScore = 0;
+  
+  if (application.entranceTestScore) {
+    const score = parseFloat(application.entranceTestScore);
+    if (score >= 80) {
+      testScore = 30;
+      strengths.push(`Excellent entrance test performance (${score}%)`);
+    } else if (score >= 60) {
+      testScore = 25;
+      strengths.push(`Good entrance test performance (${score}%)`);
+    } else if (score >= 40) {
+      testScore = 15;
+    } else {
+      testScore = 5;
+      concerns.push(`Low entrance test score (${score}%)`);
+    }
+    
+    reasoning.push({
+      category: "Entrance Test",
+      assessment: `Scored ${score}%`,
+      impact: score >= 60 ? "positive" : score >= 40 ? "neutral" : "negative",
+      score: testScore
+    });
+  } else {
+    reasoning.push({
+      category: "Entrance Test",
+      assessment: "Not yet completed",
+      impact: "neutral",
+      score: 0
+    });
+  }
+  totalScore += testScore;
+  
+  // Interview Assessment (30 points)
+  maxScore += 30;
+  let interviewScore = 0;
+  
+  if (application.interviewScore) {
+    const score = parseFloat(application.interviewScore);
+    if (score >= 80) {
+      interviewScore = 30;
+      strengths.push(`Outstanding interview performance (${score}%)`);
+    } else if (score >= 60) {
+      interviewScore = 25;
+      strengths.push(`Positive interview impression (${score}%)`);
+    } else if (score >= 40) {
+      interviewScore = 15;
+    } else {
+      interviewScore = 5;
+      concerns.push(`Interview performance below expectations (${score}%)`);
+    }
+    
+    reasoning.push({
+      category: "Interview",
+      assessment: `Scored ${score}%`,
+      impact: score >= 60 ? "positive" : score >= 40 ? "neutral" : "negative",
+      score: interviewScore
+    });
+  } else {
+    reasoning.push({
+      category: "Interview",
+      assessment: "Not yet completed",
+      impact: "neutral",
+      score: 0
+    });
+  }
+  totalScore += interviewScore;
+  
+  // Previous Academic Record (20 points)
+  maxScore += 20;
+  let academicScore = 10; // Base score
+  
+  if (application.previousMarks) {
+    const marks = parseFloat(application.previousMarks);
+    if (marks >= 80) {
+      academicScore = 20;
+      strengths.push(`Strong previous academic record (${marks}%)`);
+    } else if (marks >= 60) {
+      academicScore = 15;
+    } else if (marks >= 40) {
+      academicScore = 10;
+    } else {
+      academicScore = 5;
+      concerns.push(`Previous academic performance needs attention (${marks}%)`);
+    }
+    
+    reasoning.push({
+      category: "Previous Academics",
+      assessment: `${marks}% in previous grade`,
+      impact: marks >= 60 ? "positive" : marks >= 40 ? "neutral" : "negative",
+      score: academicScore
+    });
+  } else {
+    reasoning.push({
+      category: "Previous Academics",
+      assessment: "No previous records (new student)",
+      impact: "neutral",
+      score: 10
+    });
+  }
+  totalScore += academicScore;
+  
+  // Calculate percentage and decision
+  const percentage = Math.round((totalScore / maxScore) * 100);
+  let recommendedDecision: DecisionSupport["recommendedDecision"];
+  let finalRecommendation: string;
+  
+  if (percentage >= 75) {
+    recommendedDecision = "admit";
+    finalRecommendation = "Strong candidate. Recommend admission with confidence.";
+  } else if (percentage >= 60) {
+    recommendedDecision = "admit";
+    finalRecommendation = "Good candidate. Recommend admission.";
+  } else if (percentage >= 45) {
+    recommendedDecision = "waitlist";
+    finalRecommendation = "Average profile. Consider for waitlist pending seat availability.";
+  } else if (percentage >= 30) {
+    recommendedDecision = "needs_review";
+    finalRecommendation = "Below average. Requires detailed committee review before decision.";
+  } else {
+    recommendedDecision = "reject";
+    finalRecommendation = "Does not meet minimum admission criteria.";
+  }
+  
+  // Adjust if screening is incomplete
+  if (!application.entranceTestScore || !application.interviewScore) {
+    recommendedDecision = "needs_review";
+    finalRecommendation = "Screening incomplete. Complete entrance test and interview before final decision.";
+  }
+  
+  return {
+    applicationId: application.id,
+    applicationNumber: application.applicationNumber,
+    studentName,
+    recommendedDecision,
+    confidenceScore: percentage,
+    reasoning,
+    strengths,
+    concerns,
+    finalRecommendation
   };
 }
