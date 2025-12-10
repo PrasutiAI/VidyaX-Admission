@@ -106,15 +106,16 @@ export default function ApplicationForm() {
 
   const submitMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest("POST", "/api/admission/applications", data);
+      const response = await apiRequest("POST", "/api/admission/applications", data);
+      return response.json();
     },
-    onSuccess: (response: any) => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admission/applications"] });
       toast({ 
         title: "Application Submitted Successfully", 
-        description: `Application number: ${response.applicationNumber}` 
+        description: `Application number: ${data.applicationNumber}` 
       });
-      navigate(`/applications/${response.id}`);
+      navigate(`/applications/${data.id}`);
     },
     onError: (error: Error) => {
       toast({ 
