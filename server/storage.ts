@@ -88,6 +88,13 @@ export interface IStorage {
   getApplicationsByStatus(): Promise<{ status: string; count: number }[]>;
   getApplicationTrends(): Promise<{ date: string; count: number }[]>;
   getScheduledEvents(): Promise<any[]>;
+  
+  // Additional Reports
+  getEntranceTestResultsReport(): Promise<any>;
+  getRejectionAnalysisReport(): Promise<any>;
+  
+  // Offer Letter
+  generateOfferLetterData(applicationId: string): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -692,6 +699,157 @@ export class DatabaseStorage implements IStorage {
       })),
     ];
     return events.sort((a, b) => new Date(a.date!).getTime() - new Date(b.date!).getTime());
+  }
+
+  // Entrance Test Results Report
+  async getEntranceTestResultsReport(): Promise<any> {
+    const testResults = await db.select()
+      .from(admissionApplications)
+      .where(sql`${admissionApplications.entranceTestScore} IS NOT NULL`)
+      .orderBy(desc(admissionApplications.entranceTestDate));
+
+    const byGrade = await db.select({
+      grade: admissionApplications.gradeAppliedFor,
+      avgScore: sql<number>`ROUND(AVG(CAST(${admissionApplications.entranceTestScore} AS numeric)), 1)`,
+      minScore: sql<number>`MIN(CAST(${admissionApplications.entranceTestScore} AS numeric))`,
+      maxScore: sql<number>`MAX(CAST(${admissionApplications.entranceTestScore} AS numeric))`,
+      count: sql<number>`count(*)`,
+    })
+      .from(admissionApplications)
+      .where(sql`${admissionApplications.entranceTestScore} IS NOT NULL`)
+      .groupBy(admissionApplications.gradeAppliedFor);
+
+    const passCount = await db.select({ count: sql<number>`count(*)` })
+      .from(admissionApplications)
+      .where(sql`CAST(${admissionApplications.entranceTestScore} AS numeric) >= 40`);
+
+    const failCount = await db.select({ count: sql<number>`count(*)` })
+      .from(admissionApplications)
+      .where(sql`CAST(${admissionApplications.entranceTestScore} AS numeric) < 40 AND ${admissionApplications.entranceTestScore} IS NOT NULL`);
+
+    return {
+      totalTests: testResults.length,
+      passed: Number(passCount[0]?.count || 0),
+      failed: Number(failCount[0]?.count || 0),
+      passRate: testResults.length > 0 
+        ? Math.round((Number(passCount[0]?.count || 0) / testResults.length) * 100) 
+        : 0,
+      byGrade: byGrade.map(g => ({
+        grade: g.grade,
+        avgScore: Number(g.avgScore) || 0,
+        minScore: Number(g.minScore) || 0,
+        maxScore: Number(g.maxScore) || 0,
+        count: Number(g.count),
+      })),
+      recentResults: testResults.slice(0, 10).map(app => ({
+        id: app.id,
+        applicationNumber: app.applicationNumber,
+        studentName: `${app.studentFirstName} ${app.studentLastName}`,
+        grade: app.gradeAppliedFor,
+        score: Number(app.entranceTestScore),
+        date: app.entranceTestDate,
+        passed: Number(app.entranceTestScore) >= 40,
+      })),
+    };
+  }
+
+  // Rejection Analysis Report
+  async getRejectionAnalysisReport(): Promise<any> {
+    const rejected = await db.select()
+      .from(admissionApplications)
+      .where(eq(admissionApplications.status, "rejected"))
+      .orderBy(desc(admissionApplications.decisionDate));
+
+    const byGrade = await db.select({
+      grade: admissionApplications.gradeAppliedFor,
+      count: sql<number>`count(*)`,
+    })
+      .from(admissionApplications)
+      .where(eq(admissionApplications.status, "rejected"))
+      .groupBy(admissionApplications.gradeAppliedFor);
+
+    const rejectionHistory = await db.select({
+      applicationId: applicationStatusHistory.applicationId,
+      remarks: applicationStatusHistory.remarks,
+      changedAt: applicationStatusHistory.changedAt,
+    })
+      .from(applicationStatusHistory)
+      .where(eq(applicationStatusHistory.toStatus, "rejected"))
+      .orderBy(desc(applicationStatusHistory.changedAt));
+
+    const reasonCounts: Record<string, number> = {};
+    rejectionHistory.forEach(h => {
+      const reason = h.remarks || "No reason specified";
+      reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+    });
+
+    const byReason = Object.entries(reasonCounts)
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const totalApplications = await db.select({ count: sql<number>`count(*)` }).from(admissionApplications);
+    const rejectionRate = Number(totalApplications[0]?.count || 0) > 0 
+      ? Math.round((rejected.length / Number(totalApplications[0]?.count)) * 100)
+      : 0;
+
+    return {
+      totalRejected: rejected.length,
+      rejectionRate,
+      byGrade: byGrade.map(g => ({ grade: g.grade, count: Number(g.count) })),
+      byReason: byReason.slice(0, 10),
+      recentRejections: rejected.slice(0, 10).map(app => ({
+        id: app.id,
+        applicationNumber: app.applicationNumber,
+        studentName: `${app.studentFirstName} ${app.studentLastName}`,
+        grade: app.gradeAppliedFor,
+        decisionDate: app.decisionDate,
+        remarks: app.decisionRemarks || "No reason specified",
+      })),
+    };
+  }
+
+  // Generate Offer Letter Data
+  async generateOfferLetterData(applicationId: string): Promise<any> {
+    const application = await this.getApplication(applicationId);
+    if (!application) return undefined;
+
+    const cycle = await this.getAdmissionCycle(application.admissionCycleId);
+    
+    const gradeLabel = application.gradeAppliedFor
+      .replace(/([A-Z])/g, " $1")
+      .replace(/^./, (str) => str.toUpperCase())
+      .replace("grade", "Grade ")
+      .replace("lkg", "LKG")
+      .replace("ukg", "UKG")
+      .replace("nursery", "Nursery");
+
+    const offerDate = application.decisionDate 
+      ? new Date(application.decisionDate).toLocaleDateString("en-IN", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : new Date().toLocaleDateString("en-IN", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+
+    return {
+      applicationNumber: application.applicationNumber,
+      studentName: `${application.studentFirstName} ${application.studentLastName}`,
+      fatherName: application.fatherName,
+      motherName: application.motherName,
+      dateOfBirth: application.dateOfBirth,
+      grade: gradeLabel,
+      academicYear: cycle?.academicYear || "2024-2025",
+      cycleName: cycle?.cycleName || "Admission Cycle",
+      offerDate,
+      status: application.status,
+      address: application.currentAddress,
+      fatherContact: application.fatherContact,
+      fatherEmail: application.fatherEmail,
+    };
   }
 }
 

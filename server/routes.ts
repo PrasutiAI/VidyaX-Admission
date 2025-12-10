@@ -252,6 +252,9 @@ export async function registerRoutes(
       if (!validation.success) {
         return res.status(400).json({ message: validation.error });
       }
+      
+      const oldApp = await storage.getApplication(req.params.id);
+      
       const application = await storage.updateApplicationStatus(
         req.params.id, 
         validation.data.status, 
@@ -260,6 +263,67 @@ export async function registerRoutes(
       if (!application) {
         return res.status(404).json({ message: "Application not found" });
       }
+      
+      const statusMessages: Record<string, { title: string; message: string }> = {
+        documents_verified: { 
+          title: "Documents Verified", 
+          message: `Documents for ${application.studentFirstName} ${application.studentLastName} have been verified.` 
+        },
+        entrance_test_scheduled: { 
+          title: "Entrance Test Scheduled", 
+          message: `Entrance test scheduled for ${application.studentFirstName} ${application.studentLastName}.` 
+        },
+        entrance_test_completed: { 
+          title: "Entrance Test Completed", 
+          message: `${application.studentFirstName} ${application.studentLastName} has completed the entrance test.` 
+        },
+        interview_scheduled: { 
+          title: "Interview Scheduled", 
+          message: `Interview scheduled for ${application.studentFirstName} ${application.studentLastName}.` 
+        },
+        interview_completed: { 
+          title: "Interview Completed", 
+          message: `Interview completed for ${application.studentFirstName} ${application.studentLastName}.` 
+        },
+        offer_extended: { 
+          title: "Offer Extended", 
+          message: `Admission offer extended to ${application.studentFirstName} ${application.studentLastName}.` 
+        },
+        offer_accepted: { 
+          title: "Offer Accepted", 
+          message: `${application.studentFirstName} ${application.studentLastName} has accepted the admission offer.` 
+        },
+        enrolled: { 
+          title: "Student Enrolled", 
+          message: `${application.studentFirstName} ${application.studentLastName} has been successfully enrolled.` 
+        },
+        rejected: { 
+          title: "Application Rejected", 
+          message: `Application for ${application.studentFirstName} ${application.studentLastName} has been rejected.` 
+        },
+        waitlisted: { 
+          title: "Application Waitlisted", 
+          message: `${application.studentFirstName} ${application.studentLastName} has been added to the waitlist.` 
+        },
+        withdrawn: { 
+          title: "Application Withdrawn", 
+          message: `Application for ${application.studentFirstName} ${application.studentLastName} has been withdrawn.` 
+        },
+      };
+      
+      const notifInfo = statusMessages[validation.data.status];
+      if (notifInfo) {
+        await storage.createNotification({
+          title: notifInfo.title,
+          message: notifInfo.message,
+          type: validation.data.status === "rejected" || validation.data.status === "withdrawn" ? "warning" : 
+                validation.data.status === "enrolled" || validation.data.status === "offer_accepted" ? "success" : "info",
+          relatedEntityType: "application",
+          relatedEntityId: application.id,
+          isRead: "false",
+        });
+      }
+      
       res.json(application);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -499,6 +563,42 @@ export async function registerRoutes(
     try {
       const report = await storage.getDocumentVerificationReport();
       res.json(report);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Reports - Entrance Test Results Report
+  app.get("/api/reports/entrance-test-results", async (req, res) => {
+    try {
+      const report = await storage.getEntranceTestResultsReport();
+      res.json(report);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Reports - Rejection Analysis Report
+  app.get("/api/reports/rejection-analysis", async (req, res) => {
+    try {
+      const report = await storage.getRejectionAnalysisReport();
+      res.json(report);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Offer Letter Download
+  app.get("/api/admission/applications/:id/offer-letter", async (req, res) => {
+    try {
+      const offerData = await storage.generateOfferLetterData(req.params.id);
+      if (!offerData) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      if (!["offer_extended", "offer_accepted", "enrolled"].includes(offerData.status)) {
+        return res.status(400).json({ message: "Offer letter is only available for applications with extended, accepted, or enrolled status" });
+      }
+      res.json(offerData);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

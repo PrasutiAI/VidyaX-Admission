@@ -18,6 +18,8 @@ import {
   GraduationCap,
   ClipboardCheck,
   MessageSquare,
+  Download,
+  Printer,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -119,6 +121,7 @@ export default function ApplicationDetail() {
   const [docVerifyAction, setDocVerifyAction] = useState<"verified" | "rejected">("verified");
   const [docVerifyRemarks, setDocVerifyRemarks] = useState("");
   const [newNote, setNewNote] = useState({ type: "note" as const, content: "" });
+  const [isOfferLetterDialogOpen, setIsOfferLetterDialogOpen] = useState(false);
 
   const { data: application, isLoading } = useQuery<ApplicationWithRelations>({
     queryKey: ["/api/admission/applications", params.id],
@@ -127,6 +130,25 @@ export default function ApplicationDetail() {
   const { data: communications, isLoading: commsLoading } = useQuery<ApplicationCommunication[]>({
     queryKey: ["/api/admission/applications", params.id, "communications"],
     enabled: !!params.id,
+  });
+
+  const { data: offerLetterData, isLoading: offerLetterLoading } = useQuery<{
+    applicationNumber: string;
+    studentName: string;
+    fatherName: string;
+    motherName: string;
+    dateOfBirth: string;
+    grade: string;
+    academicYear: string;
+    cycleName: string;
+    offerDate: string;
+    status: string;
+    address: { street: string; city: string; state: string; pincode: string; country: string };
+    fatherContact: string;
+    fatherEmail: string;
+  }>({
+    queryKey: ["/api/admission/applications", params.id, "offer-letter"],
+    enabled: !!params.id && ["offer_extended", "offer_accepted", "enrolled"].includes(application?.status || ""),
   });
 
   const statusMutation = useMutation({
@@ -633,6 +655,22 @@ export default function ApplicationDetail() {
                   <p className="font-medium capitalize">{application.applicationFeeStatus}</p>
                 </div>
               </div>
+              
+              {["offer_extended", "offer_accepted", "enrolled"].includes(application.status) && (
+                <Separator className="my-4" />
+              )}
+              
+              {["offer_extended", "offer_accepted", "enrolled"].includes(application.status) && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setIsOfferLetterDialogOpen(true)}
+                  data-testid="button-view-offer-letter"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  View Offer Letter
+                </Button>
+              )}
             </CardContent>
           </Card>
 
@@ -808,6 +846,177 @@ export default function ApplicationDetail() {
               data-testid="button-save-screening"
             >
               {screeningMutation.isPending ? "Saving..." : "Save Results"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isOfferLetterDialogOpen} onOpenChange={setIsOfferLetterDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="print:hidden">
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Admission Offer Letter
+            </DialogTitle>
+            <DialogDescription>
+              Official offer letter for {application?.studentFirstName} {application?.studentLastName}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {offerLetterLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            </div>
+          ) : offerLetterData ? (
+            <div className="offer-letter-content space-y-6 p-6 bg-white dark:bg-background border rounded-lg print:border-0 print:p-0" id="offer-letter-print">
+              <div className="text-center space-y-2 border-b pb-6">
+                <h1 className="text-2xl font-bold text-foreground">School Name</h1>
+                <p className="text-sm text-muted-foreground">Excellence in Education Since 1990</p>
+                <p className="text-xs text-muted-foreground">123 Education Lane, Academic City, State - 123456</p>
+              </div>
+
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm"><span className="font-medium">Ref:</span> {offerLetterData.applicationNumber}</p>
+                  <p className="text-sm"><span className="font-medium">Date:</span> {offerLetterData.offerDate}</p>
+                </div>
+                <Badge variant="outline" className="text-xs">
+                  {offerLetterData.cycleName} ({offerLetterData.academicYear})
+                </Badge>
+              </div>
+
+              <div className="space-y-1">
+                <p className="font-medium">To,</p>
+                <p>{offerLetterData.fatherName} / {offerLetterData.motherName}</p>
+                {offerLetterData.address && (
+                  <>
+                    <p className="text-sm text-muted-foreground">{offerLetterData.address.street}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {offerLetterData.address.city}, {offerLetterData.address.state} - {offerLetterData.address.pincode}
+                    </p>
+                  </>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <p className="font-medium">Subject: Admission Offer for {offerLetterData.studentName}</p>
+                
+                <p>Dear Parent/Guardian,</p>
+                
+                <p className="text-justify">
+                  We are pleased to inform you that your ward, <span className="font-medium">{offerLetterData.studentName}</span>, 
+                  has been selected for admission to <span className="font-medium">{offerLetterData.grade}</span> for 
+                  the Academic Year <span className="font-medium">{offerLetterData.academicYear}</span>.
+                </p>
+
+                <p className="text-justify">
+                  This offer is subject to the verification of original documents and payment of applicable fees 
+                  within the stipulated time frame. Please visit the school administration office to complete 
+                  the admission formalities.
+                </p>
+
+                <div className="bg-muted/50 p-4 rounded-lg space-y-2">
+                  <p className="font-medium text-sm">Student Details:</p>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <p><span className="text-muted-foreground">Name:</span> {offerLetterData.studentName}</p>
+                    <p><span className="text-muted-foreground">Date of Birth:</span> {offerLetterData.dateOfBirth}</p>
+                    <p><span className="text-muted-foreground">Grade:</span> {offerLetterData.grade}</p>
+                    <p><span className="text-muted-foreground">Application No:</span> {offerLetterData.applicationNumber}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="font-medium text-sm">Terms and Conditions:</p>
+                  <ol className="list-decimal list-inside text-sm space-y-1 text-muted-foreground">
+                    <li>This offer is valid for 7 days from the date of issue.</li>
+                    <li>All original documents must be submitted for verification.</li>
+                    <li>Admission fees must be paid within the stipulated time.</li>
+                    <li>The school reserves the right to withdraw this offer if any discrepancy is found.</li>
+                    <li>Students must adhere to the school's code of conduct.</li>
+                  </ol>
+                </div>
+
+                <p>We look forward to welcoming {offerLetterData.studentName} to our school family.</p>
+
+                <div className="pt-8 space-y-1">
+                  <p className="font-medium">Yours sincerely,</p>
+                  <div className="h-12" />
+                  <p className="font-medium">Principal</p>
+                  <p className="text-sm text-muted-foreground">School Name</p>
+                </div>
+              </div>
+
+              <div className="border-t pt-4 text-center">
+                <p className="text-xs text-muted-foreground">
+                  This is a computer-generated document. For queries, contact: {offerLetterData.fatherEmail || "admissions@school.edu"}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              Unable to load offer letter data
+            </div>
+          )}
+
+          <DialogFooter className="print:hidden gap-2">
+            <Button variant="outline" onClick={() => setIsOfferLetterDialogOpen(false)} data-testid="button-close-offer-letter">
+              Close
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const printContent = document.getElementById("offer-letter-print");
+                if (printContent) {
+                  const printWindow = window.open("", "_blank");
+                  if (printWindow) {
+                    printWindow.document.write(`
+                      <html>
+                        <head>
+                          <title>Offer Letter - ${offerLetterData?.applicationNumber}</title>
+                          <style>
+                            body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+                            .space-y-6 > * + * { margin-top: 1.5rem; }
+                            .space-y-4 > * + * { margin-top: 1rem; }
+                            .space-y-2 > * + * { margin-top: 0.5rem; }
+                            .space-y-1 > * + * { margin-top: 0.25rem; }
+                            .text-center { text-align: center; }
+                            .text-justify { text-align: justify; }
+                            .font-bold { font-weight: 700; }
+                            .font-medium { font-weight: 500; }
+                            .text-2xl { font-size: 1.5rem; }
+                            .text-sm { font-size: 0.875rem; }
+                            .text-xs { font-size: 0.75rem; }
+                            .text-muted { color: #6b7280; }
+                            .border-b { border-bottom: 1px solid #e5e7eb; }
+                            .border-t { border-top: 1px solid #e5e7eb; }
+                            .pb-6 { padding-bottom: 1.5rem; }
+                            .pt-4 { padding-top: 1rem; }
+                            .pt-8 { padding-top: 2rem; }
+                            .p-4 { padding: 1rem; }
+                            .rounded-lg { border-radius: 0.5rem; }
+                            .bg-muted { background-color: #f3f4f6; }
+                            .grid { display: grid; }
+                            .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+                            .gap-2 { gap: 0.5rem; }
+                            .flex { display: flex; }
+                            .justify-between { justify-content: space-between; }
+                            .items-start { align-items: flex-start; }
+                            ol { padding-left: 1rem; }
+                            @media print { body { padding: 20px; } }
+                          </style>
+                        </head>
+                        <body>${printContent.innerHTML}</body>
+                      </html>
+                    `);
+                    printWindow.document.close();
+                    printWindow.print();
+                  }
+                }
+              }}
+              data-testid="button-print-offer-letter"
+            >
+              <Printer className="h-4 w-4 mr-2" />
+              Print
             </Button>
           </DialogFooter>
         </DialogContent>
