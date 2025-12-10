@@ -1008,7 +1008,7 @@ export async function registerRoutes(
         return res.json({ grades: [], overallRecommendation: "No active admission cycle", projectedEnrollment: 0 });
       }
       const applications = await storage.getApplications();
-      const seatConfigs = await storage.getSeatConfigurations(activeCycle.id);
+      const seatConfigs = await storage.getSeatConfigs(activeCycle.id);
       const planning = generateCapacityPlanning(applications, seatConfigs);
       res.json(planning);
     } catch (error: any) {
