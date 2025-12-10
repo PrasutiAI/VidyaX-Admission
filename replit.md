@@ -1,6 +1,6 @@
 # Student Admission Management Service
 
-## Enterprise Edition v3.0.0
+## Enterprise Edition v3.1.0
 
 ## Overview
 This project is an **enterprise-grade, AI-first** full-stack TypeScript application designed to manage the complete student admission lifecycle, from initial inquiry to final enrollment. It features a React frontend and an Express.js backend, providing a comprehensive administrative dashboard for managing admission cycles, student applications, seat configurations, document tracking, and intelligent decision support.
@@ -17,6 +17,14 @@ The frontend utilizes React 18 with TypeScript, styled using Tailwind CSS and `s
 
 ### Technical Implementations
 The backend is built with Node.js and Express.js, using TypeScript with ESM modules, and exposes RESTful API endpoints. PostgreSQL is used for data persistence, with Drizzle ORM managing type-safe database interactions and migrations. Zod is employed for schema validation. Session management is facilitated by `express-session` with `connect-pg-simple`.
+
+### AI Architecture
+The AI system implements enterprise-grade governance with:
+- **Model Versioning**: All AI responses include model version identifiers
+- **Confidence Thresholds**: Configurable thresholds for different AI features
+- **Audit Logging**: Complete audit trail of all AI decisions
+- **PII Protection**: Automatic sanitization of sensitive data before AI processing
+- **Fallback System**: Graceful degradation to rule-based engines when API unavailable
 
 ## Feature Specifications
 
@@ -92,7 +100,7 @@ The backend is built with Node.js and Express.js, using TypeScript with ESM modu
 | Sibling Detection | GPT-5 | Automatically detect sibling applications |
 | Conversion Funnel | GPT-5 | Track application-to-enrollment conversion rates |
 
-### Enterprise Features (Implemented - v3.0.0)
+### Enterprise Features (Implemented - v3.1.0)
 | Feature | Status | Description |
 |---------|--------|-------------|
 | Institution Configuration | Complete | Configurable settings for any institution type |
@@ -104,6 +112,9 @@ The backend is built with Node.js and Express.js, using TypeScript with ESM modu
 | Scoring Weight Configuration | Complete | Adjustable AI scoring weights |
 | Audit Logging | Complete | Complete audit trail for compliance |
 | Settings Management UI | Complete | Admin interface for all configurations |
+| Feature Flags | Complete | Enable/disable features per institution |
+| AI Governance | Complete | Model versioning, confidence thresholds, PII protection |
+| Hierarchical Configuration | Complete | Global -> Institution -> Cycle settings |
 
 ### Frontend Features (Implemented)
 | Feature | Status | Description |
@@ -129,7 +140,7 @@ The backend is built with Node.js and Express.js, using TypeScript with ESM modu
 
 ## Pending Features (Roadmap)
 
-### High Priority - v3.1.0
+### High Priority - v3.2.0
 | Feature | Priority | Description |
 |---------|----------|-------------|
 | Email/SMS Integration | High | Send automated notifications via Twilio/SendGrid |
@@ -137,7 +148,7 @@ The backend is built with Node.js and Express.js, using TypeScript with ESM modu
 | User Authentication | High | Role-based access control with SSO/OAuth |
 | PDF Offer Letter | High | Generate downloadable PDF offer letters |
 
-### Medium Priority - v3.2.0
+### Medium Priority - v3.3.0
 | Feature | Priority | Description |
 |---------|----------|-------------|
 | Bulk Import | Medium | Import applications from Excel/CSV |
@@ -173,6 +184,8 @@ The backend is built with Node.js and Express.js, using TypeScript with ESM modu
 ### AI Integration
 - **OpenAI GPT-5**: Powers all AI features with structured JSON responses
 - **Fallback Engine**: Rule-based fallback when API key unavailable
+- **Confidence Thresholds**: Configurable per feature type
+- **Audit Logging**: Complete AI decision tracking
 
 ### UI Component Libraries
 - **Radix UI**: Unstyled, accessible UI primitives
@@ -217,6 +230,16 @@ The system is configurable for:
 - Training Centers
 - Custom institution types
 
+## AI Configuration
+The AI system uses configurable confidence thresholds:
+| Feature | Threshold | Description |
+|---------|-----------|-------------|
+| Recommendations | 70% | Minimum confidence for AI recommendations |
+| Eligibility Scoring | 75% | Minimum for eligibility calculations |
+| Predictions | 65% | Minimum for predictive outcomes |
+| Decision Support | 80% | Minimum for admission decisions |
+| Sentiment Analysis | 70% | Minimum for sentiment detection |
+
 ## Version History
 | Version | Date | Changes |
 |---------|------|---------|
@@ -225,3 +248,16 @@ The system is configurable for:
 | 2.0.0 | 2025-12-10 | AI-First features with OpenAI GPT-5 |
 | 2.7.0 | 2025-12-10 | Advanced AI: workflow optimization, cohort analysis |
 | 3.0.0 | 2025-12-10 | Enterprise Edition with full configurability |
+| 3.1.0 | 2025-12-10 | AI Governance: model versioning, confidence thresholds, audit logging, PII protection, feature flags, enterprise configuration hierarchy |
+
+## Key Files
+| File | Description |
+|------|-------------|
+| `FEATURES.md` | Comprehensive feature documentation |
+| `shared/schema.ts` | Data models and types |
+| `server/openai.ts` | AI service with GPT-5 integration |
+| `server/ai-tests.ts` | AI testing infrastructure |
+| `server/routes.ts` | API endpoints |
+| `server/storage.ts` | Database operations |
+| `client/src/pages/` | Frontend pages |
+| `design_guidelines.md` | UI/UX design guidelines |

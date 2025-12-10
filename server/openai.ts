@@ -1,7 +1,23 @@
 import OpenAI from "openai";
 import type { AdmissionApplication, ApplicationDocument } from "@shared/schema";
 
-// the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
+const AI_CONFIG = {
+  model: "gpt-5",
+  version: "3.1.0",
+  maxTokens: 2048,
+  temperature: 0.7,
+  confidenceThresholds: {
+    recommendations: 0.70,
+    eligibility: 0.75,
+    prediction: 0.65,
+    decision: 0.80,
+    sentiment: 0.70,
+  },
+  fallbackEnabled: true,
+  auditEnabled: true,
+  piiProtection: true,
+};
+
 const isOpenAIConfigured = !!process.env.OPENAI_API_KEY;
 
 const openai = isOpenAIConfigured 
@@ -58,29 +74,132 @@ export interface AIDecisionSupport {
   aiModel: string;
 }
 
-async function callOpenAI<T>(prompt: string, systemPrompt: string): Promise<T | null> {
+export interface AIAuditEntry {
+  timestamp: string;
+  feature: string;
+  applicationId?: string;
+  model: string;
+  inputSummary: string;
+  outputSummary: string;
+  confidence: number;
+  latencyMs: number;
+  fallbackUsed: boolean;
+  error?: string;
+}
+
+const aiAuditLog: AIAuditEntry[] = [];
+
+function sanitizePII(text: string): string {
+  if (!AI_CONFIG.piiProtection) return text;
+  
+  let sanitized = text;
+  
+  sanitized = sanitized.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[EMAIL_REDACTED]");
+  
+  sanitized = sanitized.replace(/\+?\d{1,4}[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,9}/g, "[PHONE_REDACTED]");
+  sanitized = sanitized.replace(/\b\d{10}\b/g, "[PHONE_REDACTED]");
+  
+  sanitized = sanitized.replace(/\b\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g, "[AADHAAR_REDACTED]");
+  
+  sanitized = sanitized.replace(/\b[A-Z]{5}\d{4}[A-Z]\b/gi, "[PAN_REDACTED]");
+  
+  sanitized = sanitized.replace(/\bpassport\s*[:\s]?\s*[A-Z]{1,2}\d{6,8}\b/gi, "[PASSPORT_REDACTED]");
+  
+  sanitized = sanitized.replace(/\b\d{6}\b/g, "[PINCODE_REDACTED]");
+  
+  sanitized = sanitized.replace(/guardian[^:]*:\s*[^,\n]+/gi, "[GUARDIAN_INFO_REDACTED]");
+  sanitized = sanitized.replace(/father[^:]*:\s*[^,\n]+/gi, "[PARENT_INFO_REDACTED]");
+  sanitized = sanitized.replace(/mother[^:]*:\s*[^,\n]+/gi, "[PARENT_INFO_REDACTED]");
+  sanitized = sanitized.replace(/parent[^:]*:\s*[^,\n]+/gi, "[PARENT_INFO_REDACTED]");
+  
+  sanitized = sanitized.replace(/address[^:]*:\s*[^,\n]+/gi, "[ADDRESS_REDACTED]");
+  
+  return sanitized;
+}
+
+function sanitizeObject(obj: any): any {
+  if (typeof obj === 'string') {
+    return sanitizePII(obj);
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeObject(item));
+  }
+  if (obj && typeof obj === 'object') {
+    const sanitized: any = {};
+    const sensitiveKeys = ['email', 'phone', 'mobile', 'address', 'guardian', 'father', 'mother', 'parent', 'aadhaar', 'pan', 'passport'];
+    for (const [key, value] of Object.entries(obj)) {
+      const lowerKey = key.toLowerCase();
+      if (sensitiveKeys.some(sk => lowerKey.includes(sk))) {
+        sanitized[key] = '[REDACTED]';
+      } else {
+        sanitized[key] = sanitizeObject(value);
+      }
+    }
+    return sanitized;
+  }
+  return obj;
+}
+
+function logAICall(entry: AIAuditEntry): void {
+  if (!AI_CONFIG.auditEnabled) return;
+  
+  aiAuditLog.push(entry);
+  
+  if (aiAuditLog.length > 1000) {
+    aiAuditLog.splice(0, 100);
+  }
+  
+  console.log(`[AI Audit] ${entry.feature} | Model: ${entry.model} | Confidence: ${(entry.confidence * 100).toFixed(1)}% | Latency: ${entry.latencyMs}ms${entry.fallbackUsed ? ' | FALLBACK' : ''}`);
+}
+
+export function getAIAuditLog(): AIAuditEntry[] {
+  return [...aiAuditLog];
+}
+
+export function getAIConfig(): typeof AI_CONFIG {
+  return { ...AI_CONFIG };
+}
+
+async function callOpenAI<T>(
+  prompt: string, 
+  systemPrompt: string,
+  feature: string,
+  applicationId?: string
+): Promise<{ result: T | null; latencyMs: number; error?: string }> {
+  const startTime = Date.now();
+  
   if (!isOpenAIConfigured || !openai) {
-    return null;
+    return { result: null, latencyMs: Date.now() - startTime, error: "OpenAI not configured" };
   }
 
   try {
+    const sanitizedPrompt = sanitizePII(prompt);
+    
     const response = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: AI_CONFIG.model,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: prompt },
+        { role: "user", content: sanitizedPrompt },
       ],
       response_format: { type: "json_object" },
-      max_completion_tokens: 2048,
+      max_completion_tokens: AI_CONFIG.maxTokens,
+      temperature: AI_CONFIG.temperature,
     });
 
     const content = response.choices[0].message.content;
-    if (!content) return null;
+    const latencyMs = Date.now() - startTime;
     
-    return JSON.parse(content) as T;
+    if (!content) {
+      return { result: null, latencyMs, error: "Empty response from OpenAI" };
+    }
+    
+    const parsed = JSON.parse(content) as T;
+    return { result: parsed, latencyMs };
   } catch (error) {
-    console.error("OpenAI API error:", error);
-    return null;
+    const latencyMs = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error(`[AI Error] ${feature}: ${errorMessage}`);
+    return { result: null, latencyMs, error: errorMessage };
   }
 }
 
@@ -88,6 +207,9 @@ export async function getAIRecommendations(
   application: AdmissionApplication,
   documents: ApplicationDocument[]
 ): Promise<AIRecommendation[]> {
+  const startTime = Date.now();
+  const feature = "recommendations";
+  
   const systemPrompt = `You are an AI admission counselor for an educational institution. Analyze the application and provide actionable recommendations. Respond with JSON in this format:
 {
   "recommendations": [
@@ -98,7 +220,8 @@ export async function getAIRecommendations(
       "description": "string",
       "suggestedAction": "string"
     }
-  ]
+  ],
+  "confidence": 0.85
 }`;
 
   const prompt = `Analyze this admission application and provide recommendations:
@@ -116,17 +239,49 @@ Previous Marks: ${application.previousMarks || 'Not provided'}
 
 Provide 3-5 specific, actionable recommendations based on the current state of this application.`;
 
-  const result = await callOpenAI<{ recommendations: AIRecommendation[] }>(prompt, systemPrompt);
+  const { result, latencyMs, error } = await callOpenAI<{ recommendations: AIRecommendation[]; confidence?: number }>(
+    prompt, 
+    systemPrompt,
+    feature,
+    application.id
+  );
+  
+  let recommendations: AIRecommendation[];
+  let confidence = 0.85;
+  let usedFallback = false;
   
   if (result?.recommendations) {
-    return result.recommendations.map(r => ({
-      ...r,
-      confidence: 0.85,
-      aiModel: "gpt-5"
-    }));
+    confidence = result.confidence || 0.85;
+    if (confidence >= AI_CONFIG.confidenceThresholds.recommendations) {
+      recommendations = result.recommendations.map(r => ({
+        ...r,
+        confidence,
+        aiModel: `${AI_CONFIG.model}-v${AI_CONFIG.version}`
+      }));
+    } else {
+      recommendations = generateFallbackRecommendations(application, documents);
+      usedFallback = true;
+    }
+  } else {
+    recommendations = generateFallbackRecommendations(application, documents);
+    usedFallback = true;
+    confidence = 0.75;
   }
 
-  return generateFallbackRecommendations(application, documents);
+  logAICall({
+    timestamp: new Date().toISOString(),
+    feature,
+    applicationId: application.id,
+    model: usedFallback ? "rule-based" : AI_CONFIG.model,
+    inputSummary: `Application ${application.applicationNumber}, Status: ${application.status}`,
+    outputSummary: `${recommendations.length} recommendations generated`,
+    confidence,
+    latencyMs,
+    fallbackUsed: usedFallback,
+    error,
+  });
+
+  return recommendations;
 }
 
 export async function getAIEligibilityScore(
@@ -134,6 +289,9 @@ export async function getAIEligibilityScore(
   documents: ApplicationDocument[],
   weights: { documentCompleteness: number; academicBackground: number; entranceTestScore: number; interviewScore: number }
 ): Promise<AIEligibilityScore> {
+  const startTime = Date.now();
+  const feature = "eligibility-score";
+  
   const systemPrompt = `You are an AI admission scoring system. Calculate an eligibility score (0-100) based on the application data and provided weights. Respond with JSON in this format:
 {
   "totalScore": number,
@@ -143,7 +301,8 @@ export async function getAIEligibilityScore(
     "entranceTestScore": number,
     "interviewScore": number
   },
-  "recommendation": "string explaining the score"
+  "recommendation": "string explaining the score",
+  "confidence": 0.90
 }`;
 
   const verifiedDocs = documents.filter(d => d.verificationStatus === 'verified').length;
@@ -167,23 +326,58 @@ Scoring Weights:
 
 Calculate scores for each category (0-25 points each based on weight) and provide a total score.`;
 
-  const result = await callOpenAI<{ totalScore: number; breakdown: any; recommendation: string }>(prompt, systemPrompt);
+  const { result, latencyMs, error } = await callOpenAI<{ 
+    totalScore: number; 
+    breakdown: any; 
+    recommendation: string;
+    confidence?: number;
+  }>(prompt, systemPrompt, feature, application.id);
+  
+  let score: AIEligibilityScore;
+  let usedFallback = false;
+  let confidence = 0.90;
   
   if (result) {
-    return {
-      ...result,
-      confidence: 0.9,
-      aiModel: "gpt-5"
-    };
+    confidence = result.confidence || 0.90;
+    if (confidence >= AI_CONFIG.confidenceThresholds.eligibility) {
+      score = {
+        ...result,
+        confidence,
+        aiModel: `${AI_CONFIG.model}-v${AI_CONFIG.version}`
+      };
+    } else {
+      score = generateFallbackEligibilityScore(application, documents, weights);
+      usedFallback = true;
+    }
+  } else {
+    score = generateFallbackEligibilityScore(application, documents, weights);
+    usedFallback = true;
+    confidence = 0.75;
   }
 
-  return generateFallbackEligibilityScore(application, documents, weights);
+  logAICall({
+    timestamp: new Date().toISOString(),
+    feature,
+    applicationId: application.id,
+    model: usedFallback ? "rule-based" : AI_CONFIG.model,
+    inputSummary: `Application ${application.applicationNumber}`,
+    outputSummary: `Score: ${score.totalScore}/100`,
+    confidence,
+    latencyMs,
+    fallbackUsed: usedFallback,
+    error,
+  });
+
+  return score;
 }
 
 export async function getAIPredictiveOutcome(
   application: AdmissionApplication,
   documents: ApplicationDocument[]
 ): Promise<AIPredictiveOutcome> {
+  const startTime = Date.now();
+  const feature = "predictive-outcome";
+  
   const systemPrompt = `You are an AI enrollment prediction system. Predict the likelihood of successful enrollment based on the application data. Respond with JSON in this format:
 {
   "enrollmentProbability": number (0-100),
@@ -191,7 +385,8 @@ export async function getAIPredictiveOutcome(
   "factors": [
     { "factor": "string", "impact": "positive" | "negative" | "neutral", "weight": number }
   ],
-  "recommendation": "string"
+  "recommendation": "string",
+  "confidence": 0.82
 }`;
 
   const prompt = `Predict enrollment outcome for this application:
@@ -207,59 +402,134 @@ Interview: ${application.interviewScore || 'N/A'}/100
 
 Analyze all factors and provide enrollment probability prediction.`;
 
-  const result = await callOpenAI<{ enrollmentProbability: number; riskLevel: "low" | "medium" | "high"; factors: any[]; recommendation: string }>(prompt, systemPrompt);
+  const { result, latencyMs, error } = await callOpenAI<{ 
+    enrollmentProbability: number; 
+    riskLevel: "low" | "medium" | "high"; 
+    factors: any[]; 
+    recommendation: string;
+    confidence?: number;
+  }>(prompt, systemPrompt, feature, application.id);
+  
+  let outcome: AIPredictiveOutcome;
+  let usedFallback = false;
+  let confidence = 0.82;
   
   if (result) {
-    return {
-      ...result,
-      confidence: 0.82,
-      aiModel: "gpt-5"
-    };
+    confidence = result.confidence || 0.82;
+    if (confidence >= AI_CONFIG.confidenceThresholds.prediction) {
+      outcome = {
+        ...result,
+        confidence,
+        aiModel: `${AI_CONFIG.model}-v${AI_CONFIG.version}`
+      };
+    } else {
+      outcome = generateFallbackPredictiveOutcome(application, documents);
+      usedFallback = true;
+    }
+  } else {
+    outcome = generateFallbackPredictiveOutcome(application, documents);
+    usedFallback = true;
+    confidence = 0.70;
   }
 
-  return generateFallbackPredictiveOutcome(application, documents);
+  logAICall({
+    timestamp: new Date().toISOString(),
+    feature,
+    applicationId: application.id,
+    model: usedFallback ? "rule-based" : AI_CONFIG.model,
+    inputSummary: `Application ${application.applicationNumber}, Status: ${application.status}`,
+    outputSummary: `Probability: ${outcome.enrollmentProbability}%, Risk: ${outcome.riskLevel}`,
+    confidence,
+    latencyMs,
+    fallbackUsed: usedFallback,
+    error,
+  });
+
+  return outcome;
 }
 
 export async function getAISentimentAnalysis(
   interviewNotes: string
 ): Promise<AISentimentAnalysis> {
+  const startTime = Date.now();
+  const feature = "sentiment-analysis";
+  
   const systemPrompt = `You are an AI sentiment analysis expert for educational admissions. Analyze interview notes and determine the overall sentiment. Respond with JSON in this format:
 {
   "sentiment": "positive" | "neutral" | "negative",
   "score": number (-1 to 1, where -1 is very negative and 1 is very positive),
   "keywords": ["array", "of", "key", "words"],
-  "summary": "brief summary of the sentiment"
+  "summary": "brief summary of the sentiment",
+  "confidence": 0.88
 }`;
 
+  const sanitizedNotes = sanitizePII(interviewNotes);
+  
   const prompt = `Analyze the sentiment of these interview notes:
 
-"${interviewNotes}"
+"${sanitizedNotes}"
 
 Provide sentiment analysis with keywords and summary.`;
 
-  const result = await callOpenAI<{ sentiment: "positive" | "neutral" | "negative"; score: number; keywords: string[]; summary: string }>(prompt, systemPrompt);
+  const { result, latencyMs, error } = await callOpenAI<{ 
+    sentiment: "positive" | "neutral" | "negative"; 
+    score: number; 
+    keywords: string[]; 
+    summary: string;
+    confidence?: number;
+  }>(prompt, systemPrompt, feature);
+  
+  let sentiment: AISentimentAnalysis;
+  let usedFallback = false;
+  let confidence = 0.88;
   
   if (result) {
-    return {
-      ...result,
-      confidence: 0.88,
-      aiModel: "gpt-5"
-    };
+    confidence = result.confidence || 0.88;
+    if (confidence >= AI_CONFIG.confidenceThresholds.sentiment) {
+      sentiment = {
+        ...result,
+        confidence,
+        aiModel: `${AI_CONFIG.model}-v${AI_CONFIG.version}`
+      };
+    } else {
+      sentiment = generateFallbackSentimentAnalysis(interviewNotes);
+      usedFallback = true;
+    }
+  } else {
+    sentiment = generateFallbackSentimentAnalysis(interviewNotes);
+    usedFallback = true;
+    confidence = 0.60;
   }
 
-  return generateFallbackSentimentAnalysis(interviewNotes);
+  logAICall({
+    timestamp: new Date().toISOString(),
+    feature,
+    model: usedFallback ? "rule-based" : AI_CONFIG.model,
+    inputSummary: `Interview notes (${interviewNotes.length} chars)`,
+    outputSummary: `Sentiment: ${sentiment.sentiment}, Score: ${sentiment.score}`,
+    confidence,
+    latencyMs,
+    fallbackUsed: usedFallback,
+    error,
+  });
+
+  return sentiment;
 }
 
 export async function getAIDecisionSupport(
   application: AdmissionApplication,
   documents: ApplicationDocument[]
 ): Promise<AIDecisionSupport> {
+  const startTime = Date.now();
+  const feature = "decision-support";
+  
   const systemPrompt = `You are an AI admission decision support system. Analyze the application and provide a recommendation with reasoning. Respond with JSON in this format:
 {
   "recommendation": "approve" | "reject" | "waitlist" | "review",
   "reasoning": ["array", "of", "reasoning", "points"],
   "strengths": ["array", "of", "strengths"],
-  "concerns": ["array", "of", "concerns"]
+  "concerns": ["array", "of", "concerns"],
+  "confidence": 0.85
 }`;
 
   const verifiedDocs = documents.filter(d => d.verificationStatus === 'verified').length;
@@ -278,23 +548,60 @@ Interview Notes: ${application.interviewNotes || 'N/A'}
 
 Analyze all factors and provide a decision recommendation.`;
 
-  const result = await callOpenAI<{ recommendation: "approve" | "reject" | "waitlist" | "review"; reasoning: string[]; strengths: string[]; concerns: string[] }>(prompt, systemPrompt);
+  const { result, latencyMs, error } = await callOpenAI<{ 
+    recommendation: "approve" | "reject" | "waitlist" | "review"; 
+    reasoning: string[]; 
+    strengths: string[]; 
+    concerns: string[];
+    confidence?: number;
+  }>(prompt, systemPrompt, feature, application.id);
+  
+  let decision: AIDecisionSupport;
+  let usedFallback = false;
+  let confidence = 0.85;
   
   if (result) {
-    return {
-      ...result,
-      confidence: 0.85,
-      aiModel: "gpt-5"
-    };
+    confidence = result.confidence || 0.85;
+    if (confidence >= AI_CONFIG.confidenceThresholds.decision) {
+      decision = {
+        ...result,
+        confidence,
+        aiModel: `${AI_CONFIG.model}-v${AI_CONFIG.version}`
+      };
+    } else {
+      decision = generateFallbackDecisionSupport(application, documents);
+      usedFallback = true;
+      console.log(`[AI] Decision confidence ${confidence} below threshold ${AI_CONFIG.confidenceThresholds.decision}, flagging for manual review`);
+    }
+  } else {
+    decision = generateFallbackDecisionSupport(application, documents);
+    usedFallback = true;
+    confidence = 0.70;
   }
 
-  return generateFallbackDecisionSupport(application, documents);
+  logAICall({
+    timestamp: new Date().toISOString(),
+    feature,
+    applicationId: application.id,
+    model: usedFallback ? "rule-based" : AI_CONFIG.model,
+    inputSummary: `Application ${application.applicationNumber}`,
+    outputSummary: `Recommendation: ${decision.recommendation}, Confidence: ${(confidence * 100).toFixed(1)}%`,
+    confidence,
+    latencyMs,
+    fallbackUsed: usedFallback,
+    error,
+  });
+
+  return decision;
 }
 
 export async function getAICommunicationTemplate(
   application: AdmissionApplication,
   templateType: string
 ): Promise<{ subject: string; body: string; variables: Record<string, string> } | null> {
+  const startTime = Date.now();
+  const feature = "communication-template";
+  
   const systemPrompt = `You are an AI communication specialist for educational admissions. Generate professional email templates for various admission stages. Respond with JSON in this format:
 {
   "subject": "email subject",
@@ -311,12 +618,34 @@ Current Status: ${application.status}
 
 Create a professional, warm, and informative email appropriate for this stage of the admission process.`;
 
-  return await callOpenAI<{ subject: string; body: string; variables: Record<string, string> }>(prompt, systemPrompt);
+  const { result, latencyMs, error } = await callOpenAI<{ 
+    subject: string; 
+    body: string; 
+    variables: Record<string, string>;
+  }>(prompt, systemPrompt, feature, application.id);
+
+  logAICall({
+    timestamp: new Date().toISOString(),
+    feature,
+    applicationId: application.id,
+    model: result ? AI_CONFIG.model : "none",
+    inputSummary: `Template type: ${templateType}`,
+    outputSummary: result ? `Template generated: ${result.subject}` : "No template generated",
+    confidence: result ? 0.90 : 0,
+    latencyMs,
+    fallbackUsed: !result,
+    error,
+  });
+
+  return result;
 }
 
 export async function getAIInterviewPreparation(
   application: AdmissionApplication
 ): Promise<{ questions: string[]; tips: string[]; focusAreas: string[] } | null> {
+  const startTime = Date.now();
+  const feature = "interview-preparation";
+  
   const systemPrompt = `You are an AI interview preparation specialist for educational admissions. Generate relevant interview questions and tips for admission interviews. Respond with JSON in this format:
 {
   "questions": ["array of 5-7 interview questions"],
@@ -334,13 +663,35 @@ Previous Marks: ${application.previousMarks || 'N/A'}%
 
 Generate age-appropriate interview questions and interviewer tips.`;
 
-  return await callOpenAI<{ questions: string[]; tips: string[]; focusAreas: string[] }>(prompt, systemPrompt);
+  const { result, latencyMs, error } = await callOpenAI<{ 
+    questions: string[]; 
+    tips: string[]; 
+    focusAreas: string[];
+  }>(prompt, systemPrompt, feature, application.id);
+
+  logAICall({
+    timestamp: new Date().toISOString(),
+    feature,
+    applicationId: application.id,
+    model: result ? AI_CONFIG.model : "none",
+    inputSummary: `Grade: ${application.gradeAppliedFor}`,
+    outputSummary: result ? `${result.questions.length} questions generated` : "No questions generated",
+    confidence: result ? 0.85 : 0,
+    latencyMs,
+    fallbackUsed: !result,
+    error,
+  });
+
+  return result;
 }
 
 export async function getAINLPSearch(
   query: string,
   applications: AdmissionApplication[]
 ): Promise<{ matches: { id: string; relevance: number; reason: string }[]; interpretation: string } | null> {
+  const startTime = Date.now();
+  const feature = "nlp-search";
+  
   if (applications.length === 0) return { matches: [], interpretation: query };
 
   const systemPrompt = `You are an AI search assistant for educational admissions. Interpret natural language queries and match them to applications. Respond with JSON in this format:
@@ -357,14 +708,91 @@ export async function getAINLPSearch(
     school: app.previousSchoolName,
   }));
 
-  const prompt = `Search query: "${query}"
+  const prompt = `Search query: "${sanitizePII(query)}"
 
 Available applications:
 ${JSON.stringify(appSummaries, null, 2)}
 
 Find applications that match this query and rank by relevance.`;
 
-  return await callOpenAI<{ matches: { id: string; relevance: number; reason: string }[]; interpretation: string }>(prompt, systemPrompt);
+  const { result, latencyMs, error } = await callOpenAI<{ 
+    matches: { id: string; relevance: number; reason: string }[]; 
+    interpretation: string;
+  }>(prompt, systemPrompt, feature);
+
+  logAICall({
+    timestamp: new Date().toISOString(),
+    feature,
+    model: result ? AI_CONFIG.model : "none",
+    inputSummary: `Query: "${query.slice(0, 50)}..."`,
+    outputSummary: result ? `${result.matches.length} matches found` : "No matches",
+    confidence: result ? 0.80 : 0,
+    latencyMs,
+    fallbackUsed: !result,
+    error,
+  });
+
+  return result;
+}
+
+export async function getAIDashboardInsights(
+  stats: { totalApplications: number; pendingReviews: number; enrolled: number; enrollmentRate: number },
+  recentApplications: AdmissionApplication[]
+): Promise<{ insights: string[]; alerts: string[]; suggestions: string[] }> {
+  const startTime = Date.now();
+  const feature = "dashboard-insights";
+  
+  const systemPrompt = `You are an AI analytics expert for educational admissions. Analyze dashboard statistics and provide actionable insights. Respond with JSON in this format:
+{
+  "insights": ["array of 3-5 key insights about the current state"],
+  "alerts": ["array of any concerning trends or issues"],
+  "suggestions": ["array of recommended actions"]
+}`;
+
+  const prompt = `Analyze these admission dashboard statistics:
+
+Total Applications: ${stats.totalApplications}
+Pending Reviews: ${stats.pendingReviews}
+Enrolled Students: ${stats.enrolled}
+Enrollment Rate: ${stats.enrollmentRate}%
+
+Recent Activity: ${recentApplications.length} recent applications
+Status Distribution: ${JSON.stringify(recentApplications.reduce((acc, app) => {
+  acc[app.status] = (acc[app.status] || 0) + 1;
+  return acc;
+}, {} as Record<string, number>))}
+
+Provide insights, alerts, and suggestions for the admission team.`;
+
+  const { result, latencyMs, error } = await callOpenAI<{ 
+    insights: string[]; 
+    alerts: string[]; 
+    suggestions: string[];
+  }>(prompt, systemPrompt, feature);
+
+  const defaultInsights = {
+    insights: [
+      `Total of ${stats.totalApplications} applications in the system`,
+      `Current enrollment rate is ${stats.enrollmentRate}%`,
+      `${stats.pendingReviews} applications awaiting review`
+    ],
+    alerts: stats.pendingReviews > 10 ? ["High number of pending reviews"] : [],
+    suggestions: ["Review pending applications to improve enrollment rate"]
+  };
+
+  logAICall({
+    timestamp: new Date().toISOString(),
+    feature,
+    model: result ? AI_CONFIG.model : "rule-based",
+    inputSummary: `Stats: ${stats.totalApplications} total, ${stats.enrolled} enrolled`,
+    outputSummary: result ? `${result.insights.length} insights generated` : "Using defaults",
+    confidence: result ? 0.85 : 0.70,
+    latencyMs,
+    fallbackUsed: !result,
+    error,
+  });
+
+  return result || defaultInsights;
 }
 
 function generateFallbackRecommendations(
@@ -383,7 +811,7 @@ function generateFallbackRecommendations(
       description: `${pendingDocs.length} document(s) need verification before proceeding.`,
       suggestedAction: "Review and verify pending documents",
       confidence: 0.95,
-      aiModel: "rule-based"
+      aiModel: "rule-based-v3.1.0"
     });
   }
 
@@ -394,8 +822,8 @@ function generateFallbackRecommendations(
       title: "Schedule Entrance Test",
       description: "Documents verified. Student is ready for entrance test scheduling.",
       suggestedAction: "Schedule entrance test",
-      confidence: 0.9,
-      aiModel: "rule-based"
+      confidence: 0.90,
+      aiModel: "rule-based-v3.1.0"
     });
   }
 
@@ -407,7 +835,7 @@ function generateFallbackRecommendations(
       description: "Entrance test completed. Consider scheduling interview.",
       suggestedAction: "Schedule interview",
       confidence: 0.85,
-      aiModel: "rule-based"
+      aiModel: "rule-based-v3.1.0"
     });
   }
 
@@ -417,8 +845,8 @@ function generateFallbackRecommendations(
       priority: "low",
       title: "Application On Track",
       description: "Application is progressing normally through the admission process.",
-      confidence: 0.8,
-      aiModel: "rule-based"
+      confidence: 0.80,
+      aiModel: "rule-based-v3.1.0"
     });
   }
 
@@ -452,7 +880,7 @@ function generateFallbackEligibilityScore(
                    totalScore >= 50 ? "Average candidate, consider for waitlist" : 
                    "Needs improvement in multiple areas",
     confidence: 0.75,
-    aiModel: "rule-based"
+    aiModel: "rule-based-v3.1.0"
   };
 }
 
@@ -498,8 +926,8 @@ function generateFallbackPredictiveOutcome(
     riskLevel: probability >= 70 ? "low" : probability >= 40 ? "medium" : "high",
     factors,
     recommendation: probability >= 70 ? "High likelihood of enrollment" : "Monitor application progress",
-    confidence: 0.7,
-    aiModel: "rule-based"
+    confidence: 0.70,
+    aiModel: "rule-based-v3.1.0"
   };
 }
 
@@ -527,8 +955,8 @@ function generateFallbackSentimentAnalysis(interviewNotes: string): AISentimentA
     score,
     keywords: [...positiveWords.filter(w => lowerNotes.includes(w)), ...negativeWords.filter(w => lowerNotes.includes(w))],
     summary: `Interview notes have ${sentiment} sentiment based on keyword analysis.`,
-    confidence: 0.6,
-    aiModel: "rule-based"
+    confidence: 0.60,
+    aiModel: "rule-based-v3.1.0"
   };
 }
 
@@ -576,9 +1004,9 @@ function generateFallbackDecisionSupport(
     ],
     strengths,
     concerns,
-    confidence: 0.7,
-    aiModel: "rule-based"
+    confidence: 0.70,
+    aiModel: "rule-based-v3.1.0"
   };
 }
 
-export { isOpenAIConfigured };
+export { isOpenAIConfigured, AI_CONFIG };

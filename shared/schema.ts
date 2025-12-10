@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, date, timestamp, jsonb, decimal } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, date, timestamp, jsonb, decimal, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -611,3 +611,102 @@ export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
 
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
+
+// Feature Flags Configuration
+export const featureFlags = pgTable("feature_flags", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  flagKey: text("flag_key").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  isEnabled: text("is_enabled", { enum: ["true", "false"] }).notNull().default("false"),
+  category: text("category", { enum: ["core", "ai", "enterprise", "experimental"] }).notNull().default("core"),
+  scope: text("scope", { enum: ["global", "institution", "cycle"] }).notNull().default("global"),
+  conditions: jsonb("conditions").$type<Record<string, any>>().default({}),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export function isFeatureEnabled(flag: FeatureFlag): boolean {
+  return flag.isEnabled === "true";
+}
+
+export const insertFeatureFlagSchema = createInsertSchema(featureFlags).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertFeatureFlag = z.infer<typeof insertFeatureFlagSchema>;
+export type FeatureFlag = typeof featureFlags.$inferSelect;
+
+// Enterprise Configuration Hierarchy
+export const enterpriseConfigSchema = z.object({
+  version: z.string().default("3.1.0"),
+  hierarchy: z.object({
+    global: z.object({
+      aiEnabled: z.boolean().default(true),
+      auditEnabled: z.boolean().default(true),
+      piiProtection: z.boolean().default(true),
+      maxFileUploadMB: z.number().default(10),
+      sessionTimeoutMinutes: z.number().default(60),
+      maintenanceMode: z.boolean().default(false),
+    }),
+    institution: z.object({
+      type: z.enum(["school", "college", "university", "training_center", "custom"]).default("school"),
+      branding: z.object({
+        name: z.string(),
+        logo: z.string().optional(),
+        primaryColor: z.string().default("#3B82F6"),
+        secondaryColor: z.string().default("#10B981"),
+      }).optional(),
+      features: z.object({
+        entranceTestRequired: z.boolean().default(true),
+        interviewRequired: z.boolean().default(true),
+        documentVerificationRequired: z.boolean().default(true),
+        aiRecommendationsEnabled: z.boolean().default(true),
+        seatReservationEnabled: z.boolean().default(true),
+      }).optional(),
+    }).optional(),
+    cycle: z.object({
+      workflowStages: z.array(z.string()).optional(),
+      documentRequirements: z.array(z.string()).optional(),
+      scoringWeights: z.record(z.number()).optional(),
+      deadlines: z.record(z.string()).optional(),
+    }).optional(),
+  }),
+  validation: z.object({
+    minAge: z.number().default(3),
+    maxAge: z.number().default(25),
+    requiredDocuments: z.array(z.string()).default(["birth_certificate", "address_proof"]),
+    passingScore: z.number().default(40),
+  }).optional(),
+});
+
+export type EnterpriseConfig = z.infer<typeof enterpriseConfigSchema>;
+
+// Default Feature Flags
+export const defaultFeatureFlags: InsertFeatureFlag[] = [
+  { flagKey: "ai_recommendations", name: "AI Recommendations", description: "Enable AI-powered recommendations for applications", isEnabled: "true", category: "ai", scope: "global" },
+  { flagKey: "ai_eligibility_scoring", name: "AI Eligibility Scoring", description: "Enable AI-based eligibility score calculation", isEnabled: "true", category: "ai", scope: "global" },
+  { flagKey: "ai_predictive_outcome", name: "AI Predictive Outcome", description: "Enable enrollment probability predictions", isEnabled: "true", category: "ai", scope: "global" },
+  { flagKey: "ai_decision_support", name: "AI Decision Support", description: "Enable AI-powered admission decision support", isEnabled: "true", category: "ai", scope: "global" },
+  { flagKey: "ai_sentiment_analysis", name: "AI Sentiment Analysis", description: "Enable sentiment analysis for interview notes", isEnabled: "true", category: "ai", scope: "global" },
+  { flagKey: "ai_nlp_search", name: "AI NLP Search", description: "Enable natural language application search", isEnabled: "true", category: "ai", scope: "global" },
+  { flagKey: "entrance_test_required", name: "Entrance Test Required", description: "Require entrance test for all applicants", isEnabled: "true", category: "core", scope: "institution" },
+  { flagKey: "interview_required", name: "Interview Required", description: "Require interview for all applicants", isEnabled: "true", category: "core", scope: "institution" },
+  { flagKey: "document_verification", name: "Document Verification", description: "Enable document verification workflow", isEnabled: "true", category: "core", scope: "global" },
+  { flagKey: "seat_reservation", name: "Seat Reservation", description: "Enable category-based seat reservations", isEnabled: "true", category: "enterprise", scope: "institution" },
+  { flagKey: "multi_cycle_support", name: "Multi-Cycle Support", description: "Allow multiple admission cycles simultaneously", isEnabled: "false", category: "enterprise", scope: "global" },
+  { flagKey: "audit_logging", name: "Audit Logging", description: "Enable comprehensive audit logging", isEnabled: "true", category: "enterprise", scope: "global" },
+  { flagKey: "pii_protection", name: "PII Protection", description: "Enable PII protection in AI requests", isEnabled: "true", category: "enterprise", scope: "global" },
+  { flagKey: "experimental_ai_cohort", name: "Experimental AI Cohort Analysis", description: "Enable experimental cohort analysis features", isEnabled: "false", category: "experimental", scope: "global" },
+  { flagKey: "experimental_ai_sibling", name: "Experimental Sibling Detection", description: "Enable experimental sibling detection", isEnabled: "false", category: "experimental", scope: "global" },
+];
+
+// Helper to convert text enum to boolean for enterprise config compatibility
+export function flagsToBoolean(flags: FeatureFlag[]): Record<string, boolean> {
+  return flags.reduce((acc, flag) => {
+    acc[flag.flagKey] = flag.isEnabled === "true";
+    return acc;
+  }, {} as Record<string, boolean>);
+}
