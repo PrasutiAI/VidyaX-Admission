@@ -8,6 +8,14 @@ import {
   seatReservations, type SeatReservation, type InsertSeatReservation,
   applicationCommunications, type ApplicationCommunication, type InsertApplicationCommunication,
   notifications, type Notification, type InsertNotification,
+  institutionConfigs, type InstitutionConfig, type InsertInstitutionConfig,
+  workflowStages, type WorkflowStage, type InsertWorkflowStage,
+  documentTypeConfigs, type DocumentTypeConfig, type InsertDocumentTypeConfig,
+  gradingSystemConfigs, type GradingSystemConfig, type InsertGradingSystemConfig,
+  feeComponents, type FeeComponent, type InsertFeeComponent,
+  communicationTemplates, type CommunicationTemplate, type InsertCommunicationTemplate,
+  scoringWeightConfigs, type ScoringWeightConfig, type InsertScoringWeightConfig,
+  auditLogs, type AuditLog, type InsertAuditLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sql, inArray } from "drizzle-orm";
@@ -861,6 +869,161 @@ export class DatabaseStorage implements IStorage {
       .from(admissionApplications)
       .where(eq(admissionApplications.status, "waitlisted"))
       .orderBy(desc(admissionApplications.updatedAt));
+  }
+
+  // Institution Configuration
+  async getInstitutionConfig(): Promise<InstitutionConfig | undefined> {
+    const [config] = await db.select().from(institutionConfigs).limit(1);
+    return config || undefined;
+  }
+
+  async upsertInstitutionConfig(config: InsertInstitutionConfig): Promise<InstitutionConfig> {
+    const existing = await this.getInstitutionConfig();
+    if (existing) {
+      const [updated] = await db.update(institutionConfigs)
+        .set({ ...config, updatedAt: new Date() })
+        .where(eq(institutionConfigs.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(institutionConfigs).values(config).returning();
+    return created;
+  }
+
+  // Workflow Stages
+  async getWorkflowStages(): Promise<WorkflowStage[]> {
+    return db.select().from(workflowStages).orderBy(workflowStages.order);
+  }
+
+  async upsertWorkflowStage(stage: InsertWorkflowStage): Promise<WorkflowStage> {
+    const existing = await db.select().from(workflowStages)
+      .where(eq(workflowStages.stageKey, stage.stageKey)).limit(1);
+    if (existing.length > 0) {
+      const [updated] = await db.update(workflowStages)
+        .set(stage)
+        .where(eq(workflowStages.stageKey, stage.stageKey))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(workflowStages).values(stage).returning();
+    return created;
+  }
+
+  // Document Type Configs
+  async getDocumentTypeConfigs(): Promise<DocumentTypeConfig[]> {
+    return db.select().from(documentTypeConfigs);
+  }
+
+  async upsertDocumentTypeConfig(config: InsertDocumentTypeConfig): Promise<DocumentTypeConfig> {
+    const existing = await db.select().from(documentTypeConfigs)
+      .where(eq(documentTypeConfigs.typeKey, config.typeKey)).limit(1);
+    if (existing.length > 0) {
+      const [updated] = await db.update(documentTypeConfigs)
+        .set(config)
+        .where(eq(documentTypeConfigs.typeKey, config.typeKey))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(documentTypeConfigs).values(config).returning();
+    return created;
+  }
+
+  // Grading System
+  async getGradingSystemConfig(): Promise<GradingSystemConfig | undefined> {
+    const [config] = await db.select().from(gradingSystemConfigs)
+      .where(eq(gradingSystemConfigs.isActive, "true")).limit(1);
+    return config || undefined;
+  }
+
+  async upsertGradingSystemConfig(config: InsertGradingSystemConfig): Promise<GradingSystemConfig> {
+    const existing = await this.getGradingSystemConfig();
+    if (existing) {
+      const [updated] = await db.update(gradingSystemConfigs)
+        .set({ ...config, updatedAt: new Date() })
+        .where(eq(gradingSystemConfigs.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(gradingSystemConfigs).values(config).returning();
+    return created;
+  }
+
+  // Fee Components
+  async getFeeComponents(): Promise<FeeComponent[]> {
+    return db.select().from(feeComponents).orderBy(feeComponents.order);
+  }
+
+  async createFeeComponent(component: InsertFeeComponent): Promise<FeeComponent> {
+    const [created] = await db.insert(feeComponents).values(component).returning();
+    return created;
+  }
+
+  async updateFeeComponent(id: string, component: Partial<InsertFeeComponent>): Promise<FeeComponent | undefined> {
+    const [updated] = await db.update(feeComponents)
+      .set(component)
+      .where(eq(feeComponents.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deleteFeeComponent(id: string): Promise<boolean> {
+    await db.delete(feeComponents).where(eq(feeComponents.id, id));
+    return true;
+  }
+
+  // Communication Templates
+  async getCommunicationTemplates(): Promise<CommunicationTemplate[]> {
+    return db.select().from(communicationTemplates);
+  }
+
+  async upsertCommunicationTemplate(template: InsertCommunicationTemplate): Promise<CommunicationTemplate> {
+    const existing = await db.select().from(communicationTemplates)
+      .where(eq(communicationTemplates.triggerEvent, template.triggerEvent)).limit(1);
+    if (existing.length > 0) {
+      const [updated] = await db.update(communicationTemplates)
+        .set({ ...template, updatedAt: new Date() })
+        .where(eq(communicationTemplates.triggerEvent, template.triggerEvent))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(communicationTemplates).values(template).returning();
+    return created;
+  }
+
+  // Scoring Weights
+  async getScoringWeightConfig(): Promise<ScoringWeightConfig | undefined> {
+    const [config] = await db.select().from(scoringWeightConfigs)
+      .where(eq(scoringWeightConfigs.isActive, "true")).limit(1);
+    return config || undefined;
+  }
+
+  async upsertScoringWeightConfig(config: InsertScoringWeightConfig): Promise<ScoringWeightConfig> {
+    const existing = await this.getScoringWeightConfig();
+    if (existing) {
+      const [updated] = await db.update(scoringWeightConfigs)
+        .set({ ...config, updatedAt: new Date() })
+        .where(eq(scoringWeightConfigs.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(scoringWeightConfigs).values(config).returning();
+    return created;
+  }
+
+  // Audit Logs
+  async getAuditLogs(limit: number = 100): Promise<AuditLog[]> {
+    return db.select().from(auditLogs).orderBy(desc(auditLogs.performedAt)).limit(limit);
+  }
+
+  async getEntityAuditLogs(entityType: string, entityId: string): Promise<AuditLog[]> {
+    return db.select().from(auditLogs)
+      .where(and(eq(auditLogs.entityType, entityType), eq(auditLogs.entityId, entityId)))
+      .orderBy(desc(auditLogs.performedAt));
+  }
+
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const [created] = await db.insert(auditLogs).values(log).returning();
+    return created;
   }
 }
 

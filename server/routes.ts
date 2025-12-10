@@ -706,18 +706,26 @@ export async function registerRoutes(
     }
   });
 
-  // AI-First Features
+  // AI-First Features (v3.0.0 - Now powered by OpenAI GPT-5 with fallback to rule-based)
 
   // AI Recommendations for Application Processing
   app.get("/api/ai/recommendations/:id", async (req, res) => {
     try {
-      const application = await storage.getApplicationWithRelations(req.params.id);
+      const application = await storage.getApplication(req.params.id);
       if (!application) {
         return res.status(404).json({ message: "Application not found" });
       }
-
-      const recommendations = generateAIRecommendations(application);
-      res.json(recommendations);
+      const documents = await storage.getApplicationDocuments(req.params.id);
+      
+      const { getAIRecommendations, isOpenAIConfigured } = await import("./openai");
+      const recommendations = await getAIRecommendations(application, documents);
+      
+      res.json({ 
+        recommendations, 
+        summary: `${recommendations.length} recommendations generated`,
+        aiPowered: isOpenAIConfigured,
+        model: recommendations[0]?.aiModel || "rule-based"
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -726,13 +734,27 @@ export async function registerRoutes(
   // AI Eligibility Score
   app.get("/api/ai/eligibility-score/:id", async (req, res) => {
     try {
-      const application = await storage.getApplicationWithRelations(req.params.id);
+      const application = await storage.getApplication(req.params.id);
       if (!application) {
         return res.status(404).json({ message: "Application not found" });
       }
-
-      const eligibilityScore = calculateEligibilityScore(application);
-      res.json(eligibilityScore);
+      const documents = await storage.getApplicationDocuments(req.params.id);
+      const scoringWeights = await storage.getScoringWeightConfig();
+      
+      const weights = {
+        documentCompleteness: scoringWeights?.documentCompleteness || 25,
+        academicBackground: scoringWeights?.academicBackground || 25,
+        entranceTestScore: scoringWeights?.entranceTestScore || 25,
+        interviewScore: scoringWeights?.interviewScore || 25
+      };
+      
+      const { getAIEligibilityScore, isOpenAIConfigured } = await import("./openai");
+      const score = await getAIEligibilityScore(application, documents, weights);
+      
+      res.json({ 
+        ...score, 
+        aiPowered: isOpenAIConfigured 
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -767,13 +789,28 @@ export async function registerRoutes(
   // AI Auto-Suggest Next Steps
   app.get("/api/ai/next-steps/:id", async (req, res) => {
     try {
-      const application = await storage.getApplicationWithRelations(req.params.id);
+      const application = await storage.getApplication(req.params.id);
       if (!application) {
         return res.status(404).json({ message: "Application not found" });
       }
-
-      const nextSteps = generateNextSteps(application);
-      res.json(nextSteps);
+      const documents = await storage.getApplicationDocuments(req.params.id);
+      
+      const { getAIRecommendations, isOpenAIConfigured } = await import("./openai");
+      const recommendations = await getAIRecommendations(application, documents);
+      
+      const nextSteps = recommendations
+        .filter(r => r.type === "action")
+        .map(r => ({
+          title: r.title,
+          description: r.description,
+          priority: r.priority,
+          suggestedAction: r.suggestedAction
+        }));
+      
+      res.json({ 
+        steps: nextSteps,
+        aiPowered: isOpenAIConfigured 
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -782,13 +819,19 @@ export async function registerRoutes(
   // AI Predictive Outcome Score
   app.get("/api/ai/predictive-score/:id", async (req, res) => {
     try {
-      const application = await storage.getApplicationWithRelations(req.params.id);
+      const application = await storage.getApplication(req.params.id);
       if (!application) {
         return res.status(404).json({ message: "Application not found" });
       }
-
-      const prediction = calculatePredictiveOutcome(application);
-      res.json(prediction);
+      const documents = await storage.getApplicationDocuments(req.params.id);
+      
+      const { getAIPredictiveOutcome, isOpenAIConfigured } = await import("./openai");
+      const prediction = await getAIPredictiveOutcome(application, documents);
+      
+      res.json({ 
+        ...prediction, 
+        aiPowered: isOpenAIConfigured 
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -1099,6 +1142,433 @@ export async function registerRoutes(
       const applications = await storage.getApplications();
       const funnel = generateConversionFunnel(applications);
       res.json(funnel);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ===============================================
+  // ENTERPRISE CONFIGURATION APIs (v3.0.0)
+  // ===============================================
+
+  // Institution Configuration
+  app.get("/api/config/institution", async (req, res) => {
+    try {
+      const config = await storage.getInstitutionConfig();
+      res.json(config || { institutionName: "Educational Institution", institutionType: "school", settings: {} });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/config/institution", async (req, res) => {
+    try {
+      const config = await storage.upsertInstitutionConfig(req.body);
+      await storage.createAuditLog({
+        entityType: "institution_config",
+        entityId: config.id,
+        action: "config_change",
+        newValue: req.body,
+        performedBy: "system",
+        metadata: {}
+      });
+      res.json(config);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Workflow Stages Configuration
+  app.get("/api/config/workflow-stages", async (req, res) => {
+    try {
+      const stages = await storage.getWorkflowStages();
+      res.json(stages);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/config/workflow-stages", async (req, res) => {
+    try {
+      const stage = await storage.upsertWorkflowStage(req.body);
+      await storage.createAuditLog({
+        entityType: "workflow_stage",
+        entityId: stage.id,
+        action: "config_change",
+        newValue: req.body,
+        performedBy: "system",
+        metadata: {}
+      });
+      res.json(stage);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Document Type Configuration
+  app.get("/api/config/document-types", async (req, res) => {
+    try {
+      const types = await storage.getDocumentTypeConfigs();
+      res.json(types);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/config/document-types", async (req, res) => {
+    try {
+      const docType = await storage.upsertDocumentTypeConfig(req.body);
+      await storage.createAuditLog({
+        entityType: "document_type_config",
+        entityId: docType.id,
+        action: "config_change",
+        newValue: req.body,
+        performedBy: "system",
+        metadata: {}
+      });
+      res.json(docType);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Grading System Configuration
+  app.get("/api/config/grading-system", async (req, res) => {
+    try {
+      const config = await storage.getGradingSystemConfig();
+      res.json(config || { systemType: "percentage", passingThreshold: "40", entranceTestMaxScore: 100, interviewMaxScore: 100 });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/config/grading-system", async (req, res) => {
+    try {
+      const config = await storage.upsertGradingSystemConfig(req.body);
+      await storage.createAuditLog({
+        entityType: "grading_system_config",
+        entityId: config.id,
+        action: "config_change",
+        newValue: req.body,
+        performedBy: "system",
+        metadata: {}
+      });
+      res.json(config);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Fee Components Configuration
+  app.get("/api/config/fee-components", async (req, res) => {
+    try {
+      const components = await storage.getFeeComponents();
+      res.json(components);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/config/fee-components", async (req, res) => {
+    try {
+      const component = await storage.createFeeComponent(req.body);
+      await storage.createAuditLog({
+        entityType: "fee_component",
+        entityId: component.id,
+        action: "create",
+        newValue: req.body,
+        performedBy: "system",
+        metadata: {}
+      });
+      res.status(201).json(component);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/config/fee-components/:id", async (req, res) => {
+    try {
+      const component = await storage.updateFeeComponent(req.params.id, req.body);
+      if (!component) {
+        return res.status(404).json({ message: "Fee component not found" });
+      }
+      await storage.createAuditLog({
+        entityType: "fee_component",
+        entityId: req.params.id,
+        action: "update",
+        newValue: req.body,
+        performedBy: "system",
+        metadata: {}
+      });
+      res.json(component);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/config/fee-components/:id", async (req, res) => {
+    try {
+      await storage.deleteFeeComponent(req.params.id);
+      await storage.createAuditLog({
+        entityType: "fee_component",
+        entityId: req.params.id,
+        action: "delete",
+        performedBy: "system",
+        metadata: {}
+      });
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Communication Templates
+  app.get("/api/config/communication-templates", async (req, res) => {
+    try {
+      const templates = await storage.getCommunicationTemplates();
+      res.json(templates);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/config/communication-templates", async (req, res) => {
+    try {
+      const template = await storage.upsertCommunicationTemplate(req.body);
+      await storage.createAuditLog({
+        entityType: "communication_template",
+        entityId: template.id,
+        action: "config_change",
+        newValue: req.body,
+        performedBy: "system",
+        metadata: {}
+      });
+      res.json(template);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Scoring Weights Configuration
+  app.get("/api/config/scoring-weights", async (req, res) => {
+    try {
+      const config = await storage.getScoringWeightConfig();
+      res.json(config || { documentCompleteness: 25, academicBackground: 25, entranceTestScore: 25, interviewScore: 25 });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/config/scoring-weights", async (req, res) => {
+    try {
+      const config = await storage.upsertScoringWeightConfig(req.body);
+      await storage.createAuditLog({
+        entityType: "scoring_weight_config",
+        entityId: config.id,
+        action: "config_change",
+        newValue: req.body,
+        performedBy: "system",
+        metadata: {}
+      });
+      res.json(config);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ===============================================
+  // AUDIT LOG APIs (v3.0.0)
+  // ===============================================
+
+  app.get("/api/audit/logs", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const logs = await storage.getAuditLogs(limit);
+      res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/audit/logs/:entityType/:entityId", async (req, res) => {
+    try {
+      const logs = await storage.getEntityAuditLogs(req.params.entityType, req.params.entityId);
+      res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ===============================================
+  // REAL AI APIs (v3.0.0 - OpenAI Powered)
+  // ===============================================
+
+  app.get("/api/ai-enhanced/recommendations/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplication(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      const documents = await storage.getApplicationDocuments(req.params.id);
+      
+      const { getAIRecommendations, isOpenAIConfigured } = await import("./openai");
+      const recommendations = await getAIRecommendations(application, documents);
+      
+      res.json({ 
+        recommendations, 
+        aiPowered: isOpenAIConfigured,
+        model: isOpenAIConfigured ? "gpt-5" : "rule-based"
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/ai-enhanced/eligibility-score/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplication(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      const documents = await storage.getApplicationDocuments(req.params.id);
+      const scoringWeights = await storage.getScoringWeightConfig();
+      
+      const weights = {
+        documentCompleteness: scoringWeights?.documentCompleteness || 25,
+        academicBackground: scoringWeights?.academicBackground || 25,
+        entranceTestScore: scoringWeights?.entranceTestScore || 25,
+        interviewScore: scoringWeights?.interviewScore || 25
+      };
+      
+      const { getAIEligibilityScore, isOpenAIConfigured } = await import("./openai");
+      const score = await getAIEligibilityScore(application, documents, weights);
+      
+      res.json({ 
+        ...score, 
+        aiPowered: isOpenAIConfigured,
+        weights 
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/ai-enhanced/predictive-outcome/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplication(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      const documents = await storage.getApplicationDocuments(req.params.id);
+      
+      const { getAIPredictiveOutcome, isOpenAIConfigured } = await import("./openai");
+      const prediction = await getAIPredictiveOutcome(application, documents);
+      
+      res.json({ 
+        ...prediction, 
+        aiPowered: isOpenAIConfigured 
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/ai-enhanced/decision-support/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplication(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      const documents = await storage.getApplicationDocuments(req.params.id);
+      
+      const { getAIDecisionSupport, isOpenAIConfigured } = await import("./openai");
+      const decision = await getAIDecisionSupport(application, documents);
+      
+      res.json({ 
+        ...decision, 
+        aiPowered: isOpenAIConfigured 
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/ai-enhanced/sentiment-analysis", async (req, res) => {
+    try {
+      const { text } = req.body;
+      if (!text) {
+        return res.status(400).json({ message: "Text is required" });
+      }
+      
+      const { getAISentimentAnalysis, isOpenAIConfigured } = await import("./openai");
+      const analysis = await getAISentimentAnalysis(text);
+      
+      res.json({ 
+        ...analysis, 
+        aiPowered: isOpenAIConfigured 
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/ai-enhanced/interview-prep/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplication(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      
+      const { getAIInterviewPreparation, isOpenAIConfigured } = await import("./openai");
+      const prep = await getAIInterviewPreparation(application);
+      
+      res.json({ 
+        ...(prep || { questions: [], tips: [], focusAreas: [] }), 
+        aiPowered: isOpenAIConfigured 
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/ai-enhanced/nlp-search", async (req, res) => {
+    try {
+      const { query } = req.body;
+      if (!query) {
+        return res.status(400).json({ message: "Query is required" });
+      }
+      
+      const applications = await storage.getApplications();
+      const { getAINLPSearch, isOpenAIConfigured } = await import("./openai");
+      const results = await getAINLPSearch(query, applications);
+      
+      res.json({ 
+        ...(results || { matches: [], interpretation: query }), 
+        aiPowered: isOpenAIConfigured 
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Status Endpoint
+  app.get("/api/ai-enhanced/status", async (req, res) => {
+    try {
+      const { isOpenAIConfigured } = await import("./openai");
+      res.json({
+        aiEnabled: isOpenAIConfigured,
+        model: isOpenAIConfigured ? "gpt-5" : "rule-based",
+        version: "3.0.0",
+        features: [
+          "recommendations",
+          "eligibility-scoring",
+          "predictive-outcome",
+          "decision-support",
+          "sentiment-analysis",
+          "interview-preparation",
+          "nlp-search"
+        ]
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

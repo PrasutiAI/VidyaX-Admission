@@ -402,3 +402,212 @@ export const statusColors: Record<ApplicationStatus, { bg: string; text: string 
   rejected: { bg: "bg-red-100 dark:bg-red-900", text: "text-red-700 dark:text-red-300" },
   withdrawn: { bg: "bg-gray-100 dark:bg-gray-800", text: "text-gray-700 dark:text-gray-300" },
 };
+
+// Institution Type
+export const institutionTypeEnum = [
+  "school",
+  "college",
+  "university",
+  "training_center",
+  "custom",
+] as const;
+
+export type InstitutionType = (typeof institutionTypeEnum)[number];
+
+// Institution Configuration
+export const institutionConfigs = pgTable("institution_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  institutionName: text("institution_name").notNull().default("Educational Institution"),
+  institutionType: text("institution_type", { enum: institutionTypeEnum }).notNull().default("school"),
+  logo: text("logo"),
+  address: jsonb("address").$type<Address>(),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  website: text("website"),
+  settings: jsonb("settings").$type<Record<string, any>>().default({}),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertInstitutionConfigSchema = createInsertSchema(institutionConfigs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertInstitutionConfig = z.infer<typeof insertInstitutionConfigSchema>;
+export type InstitutionConfig = typeof institutionConfigs.$inferSelect;
+
+// Workflow Stage Configuration
+export const workflowStages = pgTable("workflow_stages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stageKey: text("stage_key").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  order: integer("order").notNull().default(0),
+  isRequired: text("is_required", { enum: ["true", "false"] }).notNull().default("true"),
+  isActive: text("is_active", { enum: ["true", "false"] }).notNull().default("true"),
+  slaHours: integer("sla_hours").default(48),
+  notifyOnEntry: text("notify_on_entry", { enum: ["true", "false"] }).notNull().default("false"),
+  color: text("color").default("#3B82F6"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertWorkflowStageSchema = createInsertSchema(workflowStages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertWorkflowStage = z.infer<typeof insertWorkflowStageSchema>;
+export type WorkflowStage = typeof workflowStages.$inferSelect;
+
+// Document Type Configuration
+export const documentTypeConfigs = pgTable("document_type_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  typeKey: text("type_key").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  isRequired: text("is_required", { enum: ["true", "false"] }).notNull().default("true"),
+  applicableGrades: jsonb("applicable_grades").$type<string[]>().default([]),
+  acceptedFormats: jsonb("accepted_formats").$type<string[]>().default(["pdf", "jpg", "png"]),
+  maxFileSizeMB: integer("max_file_size_mb").default(5),
+  aiVerificationEnabled: text("ai_verification_enabled", { enum: ["true", "false"] }).notNull().default("false"),
+  isActive: text("is_active", { enum: ["true", "false"] }).notNull().default("true"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDocumentTypeConfigSchema = createInsertSchema(documentTypeConfigs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertDocumentTypeConfig = z.infer<typeof insertDocumentTypeConfigSchema>;
+export type DocumentTypeConfig = typeof documentTypeConfigs.$inferSelect;
+
+// Grading System Configuration
+export const gradingSystemConfigs = pgTable("grading_system_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  systemType: text("system_type", { enum: ["percentage", "gpa", "letter", "custom"] }).notNull().default("percentage"),
+  scale: jsonb("scale").$type<{ grade: string; minScore: number; maxScore: number; points: number }[]>().default([]),
+  passingThreshold: decimal("passing_threshold", { precision: 5, scale: 2 }).default("40"),
+  entranceTestMaxScore: integer("entrance_test_max_score").default(100),
+  interviewMaxScore: integer("interview_max_score").default(100),
+  isActive: text("is_active", { enum: ["true", "false"] }).notNull().default("true"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertGradingSystemConfigSchema = createInsertSchema(gradingSystemConfigs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertGradingSystemConfig = z.infer<typeof insertGradingSystemConfigSchema>;
+export type GradingSystemConfig = typeof gradingSystemConfigs.$inferSelect;
+
+// Fee Component Configuration
+export const feeComponents = pgTable("fee_components", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  currency: text("currency").notNull().default("INR"),
+  isRefundable: text("is_refundable", { enum: ["true", "false"] }).notNull().default("false"),
+  applicableGrades: jsonb("applicable_grades").$type<string[]>().default([]),
+  dueDate: text("due_date"),
+  lateFeePercentage: decimal("late_fee_percentage", { precision: 5, scale: 2 }).default("0"),
+  isActive: text("is_active", { enum: ["true", "false"] }).notNull().default("true"),
+  order: integer("order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFeeComponentSchema = createInsertSchema(feeComponents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertFeeComponent = z.infer<typeof insertFeeComponentSchema>;
+export type FeeComponent = typeof feeComponents.$inferSelect;
+
+// Communication Template Configuration
+export const communicationTemplates = pgTable("communication_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  templateType: text("template_type", { enum: ["email", "sms", "whatsapp"] }).notNull().default("email"),
+  triggerEvent: text("trigger_event").notNull(),
+  subject: text("subject"),
+  body: text("body").notNull(),
+  variables: jsonb("variables").$type<string[]>().default([]),
+  isActive: text("is_active", { enum: ["true", "false"] }).notNull().default("true"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCommunicationTemplateSchema = createInsertSchema(communicationTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertCommunicationTemplate = z.infer<typeof insertCommunicationTemplateSchema>;
+export type CommunicationTemplate = typeof communicationTemplates.$inferSelect;
+
+// AI Scoring Weight Configuration
+export const scoringWeightConfigs = pgTable("scoring_weight_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  documentCompleteness: integer("document_completeness").notNull().default(25),
+  academicBackground: integer("academic_background").notNull().default(25),
+  entranceTestScore: integer("entrance_test_score").notNull().default(25),
+  interviewScore: integer("interview_score").notNull().default(25),
+  customWeights: jsonb("custom_weights").$type<Record<string, number>>().default({}),
+  isActive: text("is_active", { enum: ["true", "false"] }).notNull().default("true"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertScoringWeightConfigSchema = createInsertSchema(scoringWeightConfigs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertScoringWeightConfig = z.infer<typeof insertScoringWeightConfigSchema>;
+export type ScoringWeightConfig = typeof scoringWeightConfigs.$inferSelect;
+
+// Audit Action Types
+export const auditActionEnum = [
+  "create",
+  "update",
+  "delete",
+  "status_change",
+  "access",
+  "login",
+  "logout",
+  "config_change",
+] as const;
+
+export type AuditAction = (typeof auditActionEnum)[number];
+
+// Audit Logs
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id"),
+  action: text("action", { enum: auditActionEnum }).notNull(),
+  previousValue: jsonb("previous_value").$type<Record<string, any>>(),
+  newValue: jsonb("new_value").$type<Record<string, any>>(),
+  performedBy: text("performed_by"),
+  performedAt: timestamp("performed_at").defaultNow(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  metadata: jsonb("metadata").$type<Record<string, any>>().default({}),
+});
+
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
+  id: true,
+  performedAt: true,
+});
+
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;
