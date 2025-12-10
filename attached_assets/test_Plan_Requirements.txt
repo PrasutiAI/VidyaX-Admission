@@ -1,0 +1,75 @@
+You are an automated project assistant. Create a new Markdown test-plan file at docs/Comprehensive_Test_Plan.md in the current repository and populate it with a comprehensive, production-quality Comprehensive Test Plan for this project. The file must be ready for reviewers and QA engineers.
+
+Requirements:
+
+Create folder docs/ if it doesn't exist and write Comprehensive_Test_Plan.md inside it.
+
+Use Markdown. Include a clear Version History table at the top with columns: Version, Date (YYYY-MM-DD), Author, Summary of changes. Put an initial entry (v0.1) and leave a placeholder for future updates.
+
+Provide a linked Table of Contents so sections are clickable.
+
+Cover scope and objectives, stakeholders / roles, environments (dev/staging/prod) and configuration matrix, test data strategy, and entry / exit criteria.
+
+Include the following test types — for each type include: purpose, who performs it, tools suggested, example test cases/checklists, and acceptance criteria:
+
+Unit testing (frontend & backend)
+
+Component testing
+
+Integration testing (including API contracts & service-to-service)
+
+End-to-End (E2E) testing
+
+Functional testing
+
+UI / visual regression testing
+
+Usability testing
+
+Compatibility / cross-browser / cross-device testing
+
+Accessibility (a11y) testing (WCAG checklist + tools)
+
+Performance testing (load, stress, soak) with metrics to capture
+
+Security testing (OWASP-focused checks, auth/authorization, secrets handling)
+
+API testing (contract, schema, edge-cases)
+
+Database & data integrity testing (including migration plans)
+
+Localization / i18n testing
+
+Regression testing strategy
+
+Smoke / Sanity tests
+
+Exploratory testing
+
+Chaos / resilience testing (optional)
+
+Provide Dedicated Frontend Testing and Dedicated Backend Testing sections:
+
+Frontend: component/unit test frameworks, E2E approach (test runner, headless browser), visual regression, cross-browser matrix, accessibility checklist, sample test cases for common UI flows, test data & mocking guidance, and evaluation/pass criteria with screenshots and baseline comparison guidance.
+
+Backend: unit tests, integration tests, contract tests, API test suites (happy path + edge cases), DB tests, concurrency and race-condition tests, observability checks (logs/metrics/traces), and evaluation/pass criteria.
+
+Include a Test Case Template and 8–12 concrete example test cases (mix of frontend and backend), each with: ID, Title, Objective, Preconditions, Steps, Expected Result, Severity, Priority, Attachments/Notes.
+
+Add a Bug Report Template (title, environment, steps to reproduce, expected vs actual, logs, severity, screenshots, assignee, tags).
+
+Add a Test Traceability Matrix section (linking features/requirements to test cases) and provide a small sample matrix table.
+
+Add CI/CD integration instructions for running tests automatically (unit, lint, E2E in staging), including example commands (npm, yarn, maven, pytest, or relevant), GitHub Actions / Replit Deploy examples, and gating rules (e.g., no merge to main unless tests pass).
+
+Add Reporting & Metrics: test run reports, code coverage thresholds, performance SLOs, test flakiness strategy, and daily/weekly QA dashboards. Suggest tools (Jest, Cypress, Playwright, Selenium, JUnit, pytest, Postman, Newman, k6, JMeter, Lighthouse, Axe, Snyk, OWASP ZAP) but make them optional — keep vendor-neutral recommendations first.
+
+Add Schedule & Resource Plan: test cycles, regression windows, people/roles, and risk / mitigation list.
+
+Add Appendices: Test data generation scripts, sample environment variables file, and quick commands to run the whole test suite locally and in CI.
+
+Keep document professional, concise and easy to scan: use headings, subheadings, checklists, code blocks, and tables. Use at least one example of a completed test case and one completed bug report.
+
+At the end, add a short "How to update Version History" instruction (so maintainers know how to edit the header).
+
+Output: write the full Markdown content directly to docs/Comprehensive_Test_Plan.md. If you create or modify files, ensure they’re committed with a helpful commit message: "docs: add Comprehensive Test Plan v0.1". Do not print the file content to the console — just create the file and commit it. Then reply in one short sentence confirming creation and the file path.
