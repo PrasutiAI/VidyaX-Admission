@@ -1,10 +1,10 @@
 # Student Admission Management Service
 
-**Current Version: 2.5.0** (December 2025)
+**Current Version: 2.6.0** (December 2025)
 
 ## Overview
 
-This project is a full-stack TypeScript application designed to manage the entire student admission lifecycle, from initial inquiry to final enrollment. It features a React frontend and an Express.js backend, providing an administrative dashboard for managing admission cycles, student applications, seat configurations, and document tracking. A key aspect of the system is its "AI-first" approach, incorporating intelligent features such as AI-powered recommendations, eligibility scoring, predictive analytics for admission outcomes, smart waitlist prioritization, anomaly detection, trend forecasting, and capacity planning to assist in decision-making and streamline the admission process. The system aims to enhance efficiency and provide data-driven insights for admission management.
+This project is a full-stack TypeScript application designed to manage the entire student admission lifecycle, from initial inquiry to final enrollment. It features a React frontend and an Express.js backend, providing an administrative dashboard for managing admission cycles, student applications, seat configurations, and document tracking. A key aspect of the system is its "AI-first" approach, incorporating intelligent features such as AI-powered recommendations, eligibility scoring, predictive analytics for admission outcomes, smart waitlist prioritization, anomaly detection, trend forecasting, natural language search, sentiment analysis, and smart scheduling to assist in decision-making and streamline the admission process.
 
 ## Version History
 
@@ -22,6 +22,7 @@ This project is a full-stack TypeScript application designed to manage the entir
 | 2.3.0 | 2025-12-10 | Advanced AI: smart transitions, templates, comparison, deadlines | Complete |
 | 2.4.0 | 2025-12-10 | AI document scoring, interview prep, decision support | Complete |
 | 2.5.0 | 2025-12-10 | AI enhancements: anomaly detection, trend forecasting, smart auto-fill, risk assessment, capacity planning | Complete |
+| 2.6.0 | 2025-12-10 | AI NLP search, sentiment analysis, smart scheduling recommendations | Complete |
 
 ## User Preferences
 
@@ -80,7 +81,7 @@ The backend is built with Node.js and Express.js, utilizing TypeScript with ESM 
 | Enrollment Report | Complete | Enrolled students by grade |
 | Rejection Analysis | Complete | Rejection reasons breakdown |
 
-### AI-First Features (22 Total - All Complete)
+### AI-First Features (25 Total - All Complete)
 
 | Feature | Version | Status | Description |
 |---------|---------|--------|-------------|
@@ -106,6 +107,9 @@ The backend is built with Node.js and Express.js, utilizing TypeScript with ESM 
 | Smart Form Auto-fill | v2.5.0 | Complete | AI suggestions for form fields |
 | Risk Assessment | v2.5.0 | Complete | Identify high-risk applications |
 | Capacity Planning | v2.5.0 | Complete | AI-driven seat allocation suggestions |
+| NLP Application Search | v2.6.0 | Complete | Natural language search for applications |
+| Sentiment Analysis | v2.6.0 | Complete | Analyze sentiment in interview notes |
+| Smart Scheduling | v2.6.0 | Complete | AI recommendations for optimal scheduling |
 
 ### Frontend Features (Complete)
 
@@ -122,6 +126,9 @@ The backend is built with Node.js and Express.js, utilizing TypeScript with ESM 
 | Dark Mode | Complete | Light/dark theme toggle |
 | Responsive Design | Complete | Mobile-friendly layout |
 | AI Insights Panel | Complete | AI recommendations display |
+| AI Trend Forecast | Complete | Visual trend forecasting |
+| AI Anomaly Detection Panel | Complete | Anomaly alerts on dashboard |
+| AI Capacity Planning Panel | Complete | Capacity insights on dashboard |
 
 ## Pending Features (Planned)
 
@@ -137,7 +144,7 @@ The backend is built with Node.js and Express.js, utilizing TypeScript with ESM 
 
 ## API Endpoints Summary
 
-### Core APIs (50+ endpoints)
+### Core APIs (53+ endpoints)
 
 - **Admission Cycles**: 7 endpoints for cycle management
 - **Seat Configuration**: 4 endpoints for seat management
@@ -149,33 +156,37 @@ The backend is built with Node.js and Express.js, utilizing TypeScript with ESM 
 - **Notifications**: 4 endpoints for alerts
 - **Reports**: 5 endpoints for analytics
 - **Dashboard**: 1 endpoint for stats
+- **Analytics**: 3 endpoints for data visualization
 
-### AI APIs (22 endpoints)
+### AI APIs (25 endpoints)
 
-| Endpoint | Description |
-|----------|-------------|
-| GET `/api/ai/recommendations/:id` | AI recommendations |
-| GET `/api/ai/eligibility-score/:id` | Eligibility score |
-| GET `/api/ai/document-suggestions/:id` | Document suggestions |
-| GET `/api/ai/waitlist-priority` | Waitlist prioritization |
-| GET `/api/ai/next-steps/:id` | Next steps generator |
-| GET `/api/ai/predictive-score/:id` | Predictive outcome |
-| GET `/api/ai/dashboard-insights` | Dashboard insights |
-| GET `/api/ai/bulk-recommendations` | Bulk recommendations |
-| GET `/api/ai/smart-transitions/:id` | Smart status transitions |
-| GET `/api/ai/communication-templates/:id` | Communication templates |
-| POST `/api/ai/compare-applications` | Application comparison |
-| GET `/api/ai/deadline-alerts` | Deadline alerts |
-| GET `/api/ai/quality-score/:id` | Application quality score |
-| GET `/api/ai/grade-analytics` | Grade-wise analytics |
-| GET `/api/ai/document-batch-score` | Batch document AI scoring |
-| GET `/api/ai/interview-preparation/:id` | Interview prep suggestions |
-| GET `/api/ai/decision-support/:id` | AI decision reasoning |
-| GET `/api/ai/anomaly-detection` | Anomaly detection |
-| GET `/api/ai/trend-forecast` | Trend forecasting |
-| GET `/api/ai/smart-autofill/:id` | Smart form suggestions |
-| GET `/api/ai/risk-assessment/:id` | Risk assessment |
-| GET `/api/ai/capacity-planning` | Capacity planning |
+| Endpoint | Version | Description |
+|----------|---------|-------------|
+| GET `/api/ai/recommendations/:id` | v2.0.0 | AI recommendations |
+| GET `/api/ai/eligibility-score/:id` | v2.0.0 | Eligibility score |
+| GET `/api/ai/document-suggestions/:id` | v2.0.0 | Document suggestions |
+| GET `/api/ai/waitlist-priority` | v2.0.0 | Waitlist prioritization |
+| GET `/api/ai/next-steps/:id` | v2.1.0 | Next steps generator |
+| GET `/api/ai/predictive-score/:id` | v2.1.0 | Predictive outcome |
+| GET `/api/ai/dashboard-insights` | v2.2.0 | Dashboard insights |
+| GET `/api/ai/bulk-recommendations` | v2.2.0 | Bulk recommendations |
+| GET `/api/ai/smart-transitions/:id` | v2.3.0 | Smart status transitions |
+| GET `/api/ai/communication-templates/:id` | v2.3.0 | Communication templates |
+| POST `/api/ai/compare-applications` | v2.3.0 | Application comparison |
+| GET `/api/ai/deadline-alerts` | v2.3.0 | Deadline alerts |
+| GET `/api/ai/quality-score/:id` | v2.3.0 | Application quality score |
+| GET `/api/ai/grade-analytics` | v2.3.0 | Grade-wise analytics |
+| GET `/api/ai/document-batch-score` | v2.4.0 | Batch document AI scoring |
+| GET `/api/ai/interview-preparation/:id` | v2.4.0 | Interview prep suggestions |
+| GET `/api/ai/decision-support/:id` | v2.4.0 | AI decision reasoning |
+| GET `/api/ai/anomaly-detection` | v2.5.0 | Anomaly detection |
+| GET `/api/ai/trend-forecast` | v2.5.0 | Trend forecasting |
+| GET `/api/ai/smart-autofill/:id` | v2.5.0 | Smart form suggestions |
+| GET `/api/ai/risk-assessment/:id` | v2.5.0 | Risk assessment |
+| GET `/api/ai/capacity-planning` | v2.5.0 | Capacity planning |
+| POST `/api/ai/nlp-search` | v2.6.0 | Natural language search |
+| GET `/api/ai/sentiment-analysis/:id` | v2.6.0 | Interview sentiment analysis |
+| GET `/api/ai/smart-scheduling` | v2.6.0 | Optimal scheduling recommendations |
 
 ## Data Models
 
@@ -220,13 +231,36 @@ inquiry -> application_submitted -> documents_pending -> documents_verified
 - **connect-pg-simple**: PostgreSQL session store for `express-session`
 - **Zod**: Schema declaration and validation library
 
-## Summary (v2.5.0)
+## Testing Log
+
+| Test | Date | Result | Notes |
+|------|------|--------|-------|
+| Dashboard Stats API | 2025-12-10 | Pass | Returns correct statistics |
+| AI Recommendations | 2025-12-10 | Pass | Generates contextual recommendations |
+| AI Eligibility Score | 2025-12-10 | Pass | Calculates 0-100 score correctly |
+| AI Predictive Outcome | 2025-12-10 | Pass | Probability calculation accurate |
+| AI Dashboard Insights | 2025-12-10 | Pass | System-wide insights generated |
+| AI Trend Forecast | 2025-12-10 | Pass | Forecasting working |
+| AI Anomaly Detection | 2025-12-10 | Pass | Detects data quality issues |
+| AI Capacity Planning | 2025-12-10 | Pass | Seat recommendations generated |
+| AI Smart Transitions | 2025-12-10 | Pass | Status suggestions working |
+| AI Communication Templates | 2025-12-10 | Pass | Templates generated per status |
+| AI Document Batch Score | 2025-12-10 | Pass | Batch scoring functional |
+| AI Interview Preparation | 2025-12-10 | Pass | Questions and tips generated |
+| AI Decision Support | 2025-12-10 | Pass | Decision reasoning provided |
+| AI Risk Assessment | 2025-12-10 | Pass | Risk factors identified |
+| AI Smart Autofill | 2025-12-10 | Pass | Field suggestions working |
+| NLP Search | 2025-12-10 | Pass | v2.6.0 - Natural language search functional |
+| Sentiment Analysis | 2025-12-10 | Pass | v2.6.0 - Interview notes sentiment detection |
+| Smart Scheduling | 2025-12-10 | Pass | v2.6.0 - Scheduling recommendations working |
+
+## Summary (v2.6.0)
 
 The Student Admission Management Service is a comprehensive, AI-first solution for managing the complete student admission lifecycle. Key achievements:
 
-**Completed:**
-- 50+ API endpoints implemented
-- 22 AI-powered analysis features
+**Completed (v2.6.0):**
+- 53+ API endpoints implemented
+- 25 AI-powered analysis features
 - 6 comprehensive reports
 - Full workflow automation (15 states)
 - Real-time seat management
@@ -241,3 +275,13 @@ The Student Admission Management Service is a comprehensive, AI-first solution f
 - Capacity planning
 - Dark mode support
 - Responsive design
+- Natural language application search
+- Sentiment analysis for interviews
+- Smart scheduling recommendations
+
+**Upcoming (v3.0.0):**
+- Email/SMS integration
+- Payment gateway
+- User authentication
+- PDF generation
+- Bulk import/export
