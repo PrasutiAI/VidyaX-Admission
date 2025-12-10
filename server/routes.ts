@@ -764,6 +764,59 @@ export async function registerRoutes(
     }
   });
 
+  // AI Auto-Suggest Next Steps
+  app.get("/api/ai/next-steps/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplicationWithRelations(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+
+      const nextSteps = generateNextSteps(application);
+      res.json(nextSteps);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Predictive Outcome Score
+  app.get("/api/ai/predictive-score/:id", async (req, res) => {
+    try {
+      const application = await storage.getApplicationWithRelations(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+
+      const prediction = calculatePredictiveOutcome(application);
+      res.json(prediction);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Dashboard Insights
+  app.get("/api/ai/dashboard-insights", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const stats = await storage.getDashboardStats();
+      const insights = generateDashboardInsights(applications, stats);
+      res.json(insights);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // AI Bulk Recommendations
+  app.get("/api/ai/bulk-recommendations", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const recommendations = generateBulkRecommendations(applications);
+      res.json(recommendations);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   return httpServer;
 }
 
@@ -1144,4 +1197,675 @@ function calculateWaitlistPriority(applications: any[]): WaitlistEntry[] {
       factors
     };
   }).sort((a, b) => b.priorityScore - a.priorityScore);
+}
+
+// AI Next Steps Generator
+interface NextStep {
+  step: number;
+  action: string;
+  description: string;
+  estimatedTime: string;
+  priority: "immediate" | "soon" | "later";
+  automated: boolean;
+}
+
+function generateNextSteps(application: any): { steps: NextStep[], currentPhase: string, progressPercent: number } {
+  const status = application.status;
+  const steps: NextStep[] = [];
+  let currentPhase = "Application Review";
+  let progressPercent = 0;
+
+  const statusProgress: Record<string, number> = {
+    inquiry: 5,
+    application_submitted: 10,
+    documents_pending: 20,
+    documents_verified: 30,
+    entrance_test_scheduled: 40,
+    entrance_test_completed: 50,
+    interview_scheduled: 60,
+    interview_completed: 70,
+    under_review: 80,
+    waitlisted: 85,
+    offer_extended: 90,
+    offer_accepted: 95,
+    enrolled: 100,
+    rejected: 100,
+    withdrawn: 100,
+  };
+
+  progressPercent = statusProgress[status] || 0;
+
+  switch (status) {
+    case "inquiry":
+      currentPhase = "Initial Inquiry";
+      steps.push({
+        step: 1,
+        action: "Complete Application Form",
+        description: "Request parent/guardian to submit the full application with all required details.",
+        estimatedTime: "1-2 days",
+        priority: "immediate",
+        automated: false
+      });
+      break;
+
+    case "application_submitted":
+      currentPhase = "Document Collection";
+      steps.push({
+        step: 1,
+        action: "Review Application Details",
+        description: "Verify all submitted information for completeness and accuracy.",
+        estimatedTime: "15-30 minutes",
+        priority: "immediate",
+        automated: false
+      });
+      steps.push({
+        step: 2,
+        action: "Request Documents",
+        description: "Send list of required documents to parent/guardian.",
+        estimatedTime: "1-3 days",
+        priority: "soon",
+        automated: true
+      });
+      break;
+
+    case "documents_pending":
+      currentPhase = "Document Verification";
+      steps.push({
+        step: 1,
+        action: "Verify Uploaded Documents",
+        description: "Review each document for authenticity and completeness.",
+        estimatedTime: "1-2 hours",
+        priority: "immediate",
+        automated: false
+      });
+      steps.push({
+        step: 2,
+        action: "Request Missing Documents",
+        description: "Contact parent if any required documents are missing.",
+        estimatedTime: "1-3 days",
+        priority: "soon",
+        automated: true
+      });
+      break;
+
+    case "documents_verified":
+      currentPhase = "Entrance Test Preparation";
+      steps.push({
+        step: 1,
+        action: "Schedule Entrance Test",
+        description: "Assign a test date based on grade and available slots.",
+        estimatedTime: "Immediate",
+        priority: "immediate",
+        automated: false
+      });
+      steps.push({
+        step: 2,
+        action: "Send Test Details",
+        description: "Notify parent about test date, time, and syllabus.",
+        estimatedTime: "Automatic",
+        priority: "soon",
+        automated: true
+      });
+      break;
+
+    case "entrance_test_scheduled":
+      currentPhase = "Awaiting Test";
+      steps.push({
+        step: 1,
+        action: "Conduct Entrance Test",
+        description: "Administer the test on the scheduled date.",
+        estimatedTime: "On scheduled date",
+        priority: "immediate",
+        automated: false
+      });
+      steps.push({
+        step: 2,
+        action: "Record Test Score",
+        description: "Enter the test results after evaluation.",
+        estimatedTime: "1-2 days after test",
+        priority: "soon",
+        automated: false
+      });
+      break;
+
+    case "entrance_test_completed":
+      currentPhase = "Interview Preparation";
+      const testScore = parseFloat(application.entranceTestScore || "0");
+      if (testScore >= 40) {
+        steps.push({
+          step: 1,
+          action: "Schedule Interview",
+          description: "Set up an interview with the student and parents.",
+          estimatedTime: "Immediate",
+          priority: "immediate",
+          automated: false
+        });
+      } else {
+        steps.push({
+          step: 1,
+          action: "Review Application",
+          description: "Low test score. Consider waitlisting or rejection.",
+          estimatedTime: "Immediate",
+          priority: "immediate",
+          automated: false
+        });
+      }
+      break;
+
+    case "interview_scheduled":
+      currentPhase = "Awaiting Interview";
+      steps.push({
+        step: 1,
+        action: "Conduct Interview",
+        description: "Meet with student and parents on scheduled date.",
+        estimatedTime: "On scheduled date",
+        priority: "immediate",
+        automated: false
+      });
+      steps.push({
+        step: 2,
+        action: "Record Interview Results",
+        description: "Enter interview score and notes.",
+        estimatedTime: "Same day",
+        priority: "soon",
+        automated: false
+      });
+      break;
+
+    case "interview_completed":
+      currentPhase = "Final Review";
+      steps.push({
+        step: 1,
+        action: "Make Admission Decision",
+        description: "Review all scores and make final decision.",
+        estimatedTime: "1-2 days",
+        priority: "immediate",
+        automated: false
+      });
+      break;
+
+    case "under_review":
+      currentPhase = "Decision Pending";
+      steps.push({
+        step: 1,
+        action: "Complete Review",
+        description: "Finalize admission decision based on all criteria.",
+        estimatedTime: "1-3 days",
+        priority: "immediate",
+        automated: false
+      });
+      steps.push({
+        step: 2,
+        action: "Extend Offer or Waitlist",
+        description: "Based on seat availability and candidate quality.",
+        estimatedTime: "After review",
+        priority: "soon",
+        automated: false
+      });
+      break;
+
+    case "waitlisted":
+      currentPhase = "Waitlist Management";
+      steps.push({
+        step: 1,
+        action: "Monitor Seat Availability",
+        description: "Track if seats become available from declined offers.",
+        estimatedTime: "Ongoing",
+        priority: "later",
+        automated: true
+      });
+      steps.push({
+        step: 2,
+        action: "Notify When Available",
+        description: "Contact applicant when seat becomes available.",
+        estimatedTime: "When triggered",
+        priority: "immediate",
+        automated: true
+      });
+      break;
+
+    case "offer_extended":
+      currentPhase = "Awaiting Response";
+      steps.push({
+        step: 1,
+        action: "Wait for Response",
+        description: "Allow time for parent to accept or decline offer.",
+        estimatedTime: "7 days deadline",
+        priority: "soon",
+        automated: false
+      });
+      steps.push({
+        step: 2,
+        action: "Follow Up",
+        description: "Send reminder if no response within 5 days.",
+        estimatedTime: "After 5 days",
+        priority: "later",
+        automated: true
+      });
+      break;
+
+    case "offer_accepted":
+      currentPhase = "Enrollment";
+      steps.push({
+        step: 1,
+        action: "Collect Admission Fee",
+        description: "Process admission fee payment.",
+        estimatedTime: "Immediate",
+        priority: "immediate",
+        automated: false
+      });
+      steps.push({
+        step: 2,
+        action: "Complete Enrollment",
+        description: "Finalize enrollment and generate admission number.",
+        estimatedTime: "After fee payment",
+        priority: "immediate",
+        automated: false
+      });
+      break;
+
+    case "enrolled":
+      currentPhase = "Completed";
+      steps.push({
+        step: 1,
+        action: "Enrollment Complete",
+        description: "Student successfully enrolled. Create student profile.",
+        estimatedTime: "Completed",
+        priority: "later",
+        automated: true
+      });
+      break;
+
+    case "rejected":
+    case "withdrawn":
+      currentPhase = "Closed";
+      steps.push({
+        step: 1,
+        action: "Archive Application",
+        description: "Application closed. No further action required.",
+        estimatedTime: "Completed",
+        priority: "later",
+        automated: true
+      });
+      break;
+  }
+
+  return { steps, currentPhase, progressPercent };
+}
+
+// AI Predictive Outcome Calculator
+interface PredictiveOutcome {
+  enrollmentProbability: number;
+  predictedOutcome: "likely_enroll" | "moderate_chance" | "unlikely" | "undetermined";
+  factors: {
+    factor: string;
+    impact: "positive" | "negative" | "neutral";
+    weight: number;
+    description: string;
+  }[];
+  insights: string[];
+}
+
+function calculatePredictiveOutcome(application: any): PredictiveOutcome {
+  const factors: PredictiveOutcome["factors"] = [];
+  const insights: string[] = [];
+  let probability = 50; // Base probability
+
+  // Document Status Factor
+  const documents = application.documents || [];
+  const verifiedDocs = documents.filter((d: any) => d.verificationStatus === "verified").length;
+  const pendingDocs = documents.filter((d: any) => d.verificationStatus === "pending").length;
+  const rejectedDocs = documents.filter((d: any) => d.verificationStatus === "rejected").length;
+
+  if (verifiedDocs >= 3) {
+    probability += 10;
+    factors.push({
+      factor: "Document Completion",
+      impact: "positive",
+      weight: 10,
+      description: `${verifiedDocs} documents verified`
+    });
+  } else if (rejectedDocs > 0) {
+    probability -= 15;
+    factors.push({
+      factor: "Document Issues",
+      impact: "negative",
+      weight: -15,
+      description: `${rejectedDocs} document(s) rejected`
+    });
+  }
+
+  // Entrance Test Performance
+  if (application.entranceTestScore) {
+    const score = parseFloat(application.entranceTestScore);
+    if (score >= 70) {
+      probability += 20;
+      factors.push({
+        factor: "Entrance Test",
+        impact: "positive",
+        weight: 20,
+        description: `Excellent score: ${score}%`
+      });
+      insights.push("Strong entrance test performance increases admission likelihood");
+    } else if (score >= 50) {
+      probability += 10;
+      factors.push({
+        factor: "Entrance Test",
+        impact: "positive",
+        weight: 10,
+        description: `Good score: ${score}%`
+      });
+    } else if (score < 40) {
+      probability -= 20;
+      factors.push({
+        factor: "Entrance Test",
+        impact: "negative",
+        weight: -20,
+        description: `Below threshold: ${score}%`
+      });
+      insights.push("Low entrance test score may result in rejection or waitlist");
+    }
+  }
+
+  // Interview Performance
+  if (application.interviewScore) {
+    const score = parseFloat(application.interviewScore);
+    if (score >= 70) {
+      probability += 15;
+      factors.push({
+        factor: "Interview",
+        impact: "positive",
+        weight: 15,
+        description: `Excellent interview: ${score}%`
+      });
+      insights.push("Strong interview performance is a positive indicator");
+    } else if (score >= 50) {
+      probability += 5;
+      factors.push({
+        factor: "Interview",
+        impact: "positive",
+        weight: 5,
+        description: `Good interview: ${score}%`
+      });
+    } else if (score < 40) {
+      probability -= 15;
+      factors.push({
+        factor: "Interview",
+        impact: "negative",
+        weight: -15,
+        description: `Below expectations: ${score}%`
+      });
+    }
+  }
+
+  // Previous Academic Record
+  if (application.previousMarks) {
+    const marks = parseFloat(application.previousMarks);
+    if (marks >= 80) {
+      probability += 10;
+      factors.push({
+        factor: "Previous Academics",
+        impact: "positive",
+        weight: 10,
+        description: `Outstanding: ${marks}%`
+      });
+    } else if (marks >= 60) {
+      probability += 5;
+      factors.push({
+        factor: "Previous Academics",
+        impact: "positive",
+        weight: 5,
+        description: `Good: ${marks}%`
+      });
+    }
+  }
+
+  // Application Timeline
+  const appDate = new Date(application.applicationDate);
+  const daysSince = Math.floor((Date.now() - appDate.getTime()) / (1000 * 60 * 60 * 24));
+  if (daysSince > 45) {
+    factors.push({
+      factor: "Application Age",
+      impact: "neutral",
+      weight: 0,
+      description: `${daysSince} days since submission`
+    });
+    insights.push("Long processing time may affect parent interest");
+  }
+
+  // Current Status Impact
+  const statusProbability: Record<string, number> = {
+    offer_accepted: 95,
+    offer_extended: 75,
+    interview_completed: 60,
+    entrance_test_completed: 50,
+    documents_verified: 45,
+    documents_pending: 35,
+    application_submitted: 30,
+    waitlisted: 25,
+    under_review: 55,
+  };
+
+  if (statusProbability[application.status] !== undefined) {
+    probability = (probability + statusProbability[application.status]) / 2;
+  }
+
+  // Cap probability between 5 and 95
+  probability = Math.min(95, Math.max(5, probability));
+
+  // Determine predicted outcome
+  let predictedOutcome: PredictiveOutcome["predictedOutcome"];
+  if (["enrolled", "offer_accepted"].includes(application.status)) {
+    predictedOutcome = "likely_enroll";
+    probability = 95;
+  } else if (["rejected", "withdrawn"].includes(application.status)) {
+    predictedOutcome = "unlikely";
+    probability = 5;
+  } else if (probability >= 65) {
+    predictedOutcome = "likely_enroll";
+  } else if (probability >= 40) {
+    predictedOutcome = "moderate_chance";
+  } else if (probability >= 20) {
+    predictedOutcome = "unlikely";
+  } else {
+    predictedOutcome = "undetermined";
+  }
+
+  return {
+    enrollmentProbability: Math.round(probability),
+    predictedOutcome,
+    factors,
+    insights
+  };
+}
+
+// AI Dashboard Insights Generator
+interface DashboardInsight {
+  type: "alert" | "trend" | "recommendation" | "success";
+  title: string;
+  description: string;
+  metric?: string;
+  action?: string;
+}
+
+function generateDashboardInsights(applications: any[], stats: any): { insights: DashboardInsight[], summary: string } {
+  const insights: DashboardInsight[] = [];
+
+  // Analyze pending applications
+  const pendingReview = applications.filter(a => 
+    ["application_submitted", "documents_pending", "under_review"].includes(a.status)
+  );
+  if (pendingReview.length > 10) {
+    insights.push({
+      type: "alert",
+      title: "High Pending Applications",
+      description: `${pendingReview.length} applications need attention`,
+      metric: `${pendingReview.length} pending`,
+      action: "Consider batch processing"
+    });
+  }
+
+  // Check for aging applications
+  const agingApps = applications.filter(a => {
+    const daysSince = Math.floor((Date.now() - new Date(a.applicationDate).getTime()) / (1000 * 60 * 60 * 24));
+    return daysSince > 30 && !["enrolled", "rejected", "withdrawn"].includes(a.status);
+  });
+  if (agingApps.length > 0) {
+    insights.push({
+      type: "alert",
+      title: "Aging Applications",
+      description: `${agingApps.length} application(s) older than 30 days need expediting`,
+      metric: `${agingApps.length} overdue`,
+      action: "Prioritize oldest applications"
+    });
+  }
+
+  // Enrollment rate trend
+  if (stats.enrollmentRate >= 70) {
+    insights.push({
+      type: "success",
+      title: "Strong Enrollment Rate",
+      description: `${stats.enrollmentRate}% enrollment conversion rate`,
+      metric: `${stats.enrollmentRate}%`
+    });
+  } else if (stats.enrollmentRate < 30) {
+    insights.push({
+      type: "trend",
+      title: "Low Conversion Rate",
+      description: "Enrollment rate below target. Review rejection reasons.",
+      metric: `${stats.enrollmentRate}%`,
+      action: "Analyze rejection patterns"
+    });
+  }
+
+  // Waitlist management
+  const waitlisted = applications.filter(a => a.status === "waitlisted");
+  if (waitlisted.length > 5) {
+    insights.push({
+      type: "recommendation",
+      title: "Review Waitlist",
+      description: `${waitlisted.length} students on waitlist. Check for seat availability.`,
+      metric: `${waitlisted.length} waitlisted`,
+      action: "Promote from waitlist if seats available"
+    });
+  }
+
+  // Document verification backlog
+  const docsPending = applications.filter(a => a.status === "documents_pending");
+  if (docsPending.length > 5) {
+    insights.push({
+      type: "alert",
+      title: "Document Verification Backlog",
+      description: `${docsPending.length} applications awaiting document verification`,
+      metric: `${docsPending.length} pending`,
+      action: "Schedule verification session"
+    });
+  }
+
+  // Interview scheduling
+  const readyForInterview = applications.filter(a => a.status === "entrance_test_completed");
+  if (readyForInterview.length > 0) {
+    insights.push({
+      type: "recommendation",
+      title: "Schedule Interviews",
+      description: `${readyForInterview.length} student(s) ready for interviews`,
+      metric: `${readyForInterview.length} ready`,
+      action: "Set up interview slots"
+    });
+  }
+
+  // Offers pending response
+  const offersPending = applications.filter(a => a.status === "offer_extended");
+  if (offersPending.length > 0) {
+    insights.push({
+      type: "trend",
+      title: "Offers Awaiting Response",
+      description: `${offersPending.length} offer(s) pending parent acceptance`,
+      metric: `${offersPending.length} pending`,
+      action: "Send follow-up reminders"
+    });
+  }
+
+  // Generate summary
+  const alertCount = insights.filter(i => i.type === "alert").length;
+  let summary = "System operating normally.";
+  if (alertCount > 2) {
+    summary = `${alertCount} items need immediate attention.`;
+  } else if (alertCount > 0) {
+    summary = `${alertCount} alert(s) to review.`;
+  }
+
+  return { insights, summary };
+}
+
+// AI Bulk Recommendations Generator
+interface BulkRecommendation {
+  category: string;
+  count: number;
+  applicationIds: string[];
+  suggestedAction: string;
+  priority: "high" | "medium" | "low";
+}
+
+function generateBulkRecommendations(applications: any[]): { recommendations: BulkRecommendation[], totalActions: number } {
+  const recommendations: BulkRecommendation[] = [];
+
+  // Group applications by status for bulk actions
+  const docsPending = applications.filter(a => a.status === "documents_pending");
+  if (docsPending.length > 0) {
+    recommendations.push({
+      category: "Document Verification",
+      count: docsPending.length,
+      applicationIds: docsPending.map(a => a.id),
+      suggestedAction: "Batch verify documents",
+      priority: "high"
+    });
+  }
+
+  const testReady = applications.filter(a => a.status === "documents_verified");
+  if (testReady.length > 0) {
+    recommendations.push({
+      category: "Schedule Entrance Tests",
+      count: testReady.length,
+      applicationIds: testReady.map(a => a.id),
+      suggestedAction: "Schedule tests for all verified applications",
+      priority: "medium"
+    });
+  }
+
+  const interviewReady = applications.filter(a => a.status === "entrance_test_completed");
+  if (interviewReady.length > 0) {
+    recommendations.push({
+      category: "Schedule Interviews",
+      count: interviewReady.length,
+      applicationIds: interviewReady.map(a => a.id),
+      suggestedAction: "Schedule interview slots",
+      priority: "medium"
+    });
+  }
+
+  const decisionReady = applications.filter(a => a.status === "interview_completed");
+  if (decisionReady.length > 0) {
+    recommendations.push({
+      category: "Make Decisions",
+      count: decisionReady.length,
+      applicationIds: decisionReady.map(a => a.id),
+      suggestedAction: "Review and decide on applications",
+      priority: "high"
+    });
+  }
+
+  const enrollmentReady = applications.filter(a => a.status === "offer_accepted");
+  if (enrollmentReady.length > 0) {
+    recommendations.push({
+      category: "Complete Enrollments",
+      count: enrollmentReady.length,
+      applicationIds: enrollmentReady.map(a => a.id),
+      suggestedAction: "Process enrollments and collect fees",
+      priority: "high"
+    });
+  }
+
+  const totalActions = recommendations.reduce((sum, r) => sum + r.count, 0);
+  return { recommendations, totalActions };
 }

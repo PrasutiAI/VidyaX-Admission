@@ -2,9 +2,26 @@
 
 ## Overview
 
-This is a Student Admission Management System designed to handle the complete admission lifecycle from inquiry to enrollment. The application provides an administrative dashboard for managing admission cycles, student applications, seat configurations, and document tracking. It's built as a full-stack TypeScript application with a React frontend and Express backend.
+This is a Student Admission Management System designed to handle the complete admission lifecycle from inquiry to enrollment. The application provides an administrative dashboard for managing admission cycles, student applications, seat configurations, and document tracking. It's built as a full-stack TypeScript application with a React frontend and Express backend. The system emphasizes AI-first capabilities for intelligent decision-making assistance.
 
 ## Version History
+
+### v1.4.0 (December 2024) - AI-First Enhanced Implementation
+**Major AI Enhancements:**
+- Enhanced AI recommendation engine with context-aware suggestions
+- AI-powered auto-suggest next steps for each application status
+- Predictive analytics for admission outcomes
+- Smart application review with automated insights
+- AI insights dashboard integration
+- Intelligent document verification suggestions
+- Enhanced waitlist prioritization with multi-factor scoring
+
+**New Features:**
+- Real-time AI analysis of application profiles
+- Automated action recommendations based on application status
+- Confidence-based eligibility scoring
+- Smart document completeness tracking
+- Priority-based waitlist management
 
 ### v1.3.0 (December 2024) - AI-First Enhancement
 - Added AI-powered smart recommendations for application processing
@@ -46,17 +63,21 @@ This is a Student Admission Management System designed to handle the complete ad
 | **Admission Cycles** | Create/Edit/Delete Cycles | Implemented | Full CRUD for admission cycles |
 | | Status Management | Implemented | Draft → Open → Closed → Archived workflow |
 | | Active Cycle Detection | Implemented | Auto-detect currently open cycle |
+| | Application Fee Config | Implemented | Configure application fee per cycle |
 | **Seat Management** | Grade Configuration | Implemented | Configure seats per grade |
 | | Reserved Seats | Implemented | Category-wise seat reservation |
 | | Availability Tracking | Implemented | Real-time seat availability calculation |
+| | Management Quota | Implemented | Configure management quota seats |
 | **Applications** | Application Submission | Implemented | Complete application form with validation |
 | | Application Listing | Implemented | Paginated list with filters and search |
 | | Application Details | Implemented | Detailed view with all information |
 | | Status Workflow | Implemented | Full 15-state status workflow |
 | | Status History | Implemented | Complete audit trail of status changes |
+| | Application Number Generation | Implemented | Auto-generated unique application numbers |
 | **Documents** | Document Upload | Implemented | Upload documents with type classification |
 | | Document Verification | Implemented | Verify/Reject documents with remarks |
 | | Document Listing | Implemented | View all application documents |
+| | Document Types | Implemented | 8 document types supported |
 | **Screening** | Entrance Test Scheduling | Implemented | Schedule tests with date |
 | | Test Score Recording | Implemented | Record entrance test scores |
 | | Interview Scheduling | Implemented | Schedule interviews with date |
@@ -78,12 +99,19 @@ This is a Student Admission Management System designed to handle the complete ad
 | **Notifications** | Status Change Alerts | Implemented | Auto-notifications on status change |
 | | Notification List | Implemented | View all notifications |
 | | Read/Unread Tracking | Implemented | Mark notifications as read |
-| **Communications** | Notes/Communications | Implemented | Track calls, emails, meetings |
+| | Mark All Read | Implemented | Bulk notification management |
+| **Communications** | Notes/Communications | Implemented | Track calls, emails, meetings, SMS |
 | | Communication History | Implemented | View communication log |
+| | Contact Person Tracking | Implemented | Track who was contacted |
 | **AI Features** | Smart Recommendations | Implemented | AI-powered processing suggestions |
-| | Eligibility Scoring | Implemented | AI-based application scoring |
+| | Eligibility Scoring | Implemented | AI-based application scoring (0-100) |
 | | Document Suggestions | Implemented | AI document verification hints |
 | | Waitlist Prioritization | Implemented | AI-based waitlist ordering |
+| | Auto-Suggest Next Steps | Implemented | Context-aware action recommendations |
+| | Predictive Analytics | Implemented | Admission outcome predictions |
+| | Confidence Scoring | Implemented | High/Medium/Low confidence levels |
+| **Settings** | System Settings | Implemented | Configuration management |
+| | Theme Toggle | Implemented | Dark/Light mode support |
 
 ### Pending Features (Future Roadmap)
 
@@ -92,24 +120,35 @@ This is a Student Admission Management System designed to handle the complete ad
 | **Authentication** | User Login/Logout | High | Admin authentication system |
 | | Role-Based Access | High | Permission-based feature access |
 | | Password Reset | Medium | Self-service password recovery |
+| | Multi-Factor Auth | Low | Enhanced security with MFA |
 | **Payment Integration** | Application Fee | Medium | Online payment for application fee |
 | | Admission Fee | Medium | Enrollment fee payment |
 | | Payment Gateway | Medium | Stripe/Razorpay integration |
+| | Payment History | Low | Track all payment transactions |
 | **PDF Generation** | Offer Letter PDF | Medium | Generate downloadable offer letters |
 | | Application Receipt | Low | PDF receipt for applications |
+| | Admission Card | Low | Generate admission cards |
 | **Email/SMS** | Email Notifications | High | Send emails to parents/guardians |
 | | SMS Alerts | Medium | SMS notifications for key events |
 | | Email Templates | Medium | Customizable email templates |
+| | Automated Reminders | Low | Auto-send deadline reminders |
 | **Bulk Operations** | Bulk Status Update | Medium | Update multiple applications at once |
 | | Bulk Document Verify | Low | Verify multiple documents together |
 | | Bulk Export | Medium | Export applications to CSV/Excel |
+| | Bulk Email | Low | Send emails to multiple applicants |
 | **Advanced Analytics** | Trend Analysis | Low | Historical trend charts |
 | | Conversion Funnel | Medium | Application to enrollment funnel |
-| | Predictive Analytics | Low | AI-based enrollment predictions |
+| | Comparative Analytics | Low | Year-over-year comparison |
+| | AI Recommendations Dashboard | Medium | Dedicated AI insights page |
 | **File Storage** | Cloud Storage | High | Store documents in cloud storage |
 | | File Preview | Medium | Preview documents in browser |
+| | File Size Limits | Low | Configure upload size limits |
 | **Audit Trail** | Activity Logs | Medium | Complete admin activity logging |
 | | Change History | Low | Track all data modifications |
+| | User Actions | Medium | Track who did what |
+| **Integration** | Student Information System | Medium | Sync enrolled students to SIS |
+| | Class Management | Low | Auto-assign to sections |
+| | Fee Management | Medium | Sync with fee module |
 
 ## User Preferences
 
@@ -126,6 +165,7 @@ Preferred communication style: Simple, everyday language.
 - **Theming**: Custom theme provider with light/dark mode support using CSS variables
 - **Build Tool**: Vite for development and production builds
 - **Charts**: Recharts for data visualization
+- **Icons**: Lucide React for consistent iconography
 
 ### Backend Architecture
 - **Runtime**: Node.js with Express.js
@@ -143,10 +183,10 @@ Preferred communication style: Simple, everyday language.
 ### Key Data Models
 - **Admission Cycles**: Academic year-based admission periods with status workflow (draft → open → closed → archived)
 - **Grade Seat Configurations**: Per-grade seat allocations within admission cycles
-- **Applications**: Student admission applications with multi-step status tracking
-- **Application Documents**: File attachments supporting applications
+- **Applications**: Student admission applications with multi-step status tracking (15 status states)
+- **Application Documents**: File attachments supporting applications (8 document types)
 - **Status History**: Audit trail for application status changes
-- **Communications**: Notes and communication logs per application
+- **Communications**: Notes and communication logs per application (5 communication types)
 - **Notifications**: System notifications for status changes and events
 - **Seat Reservations**: Temporary seat holds during enrollment
 
@@ -169,9 +209,9 @@ Preferred communication style: Simple, everyday language.
 └── migrations/       # Database migrations
 ```
 
-### API Endpoints
+## API Endpoints
 
-#### Admission Cycles
+### Admission Cycles
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/admission/cycles` | List all cycles |
@@ -182,7 +222,7 @@ Preferred communication style: Simple, everyday language.
 | PATCH | `/api/admission/cycles/:id/status` | Change status |
 | DELETE | `/api/admission/cycles/:id` | Delete cycle |
 
-#### Seat Configuration
+### Seat Configuration
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/admission/cycles/:id/seats` | Get seat configs |
@@ -190,7 +230,7 @@ Preferred communication style: Simple, everyday language.
 | POST | `/api/admission/cycles/:id/seats` | Create config |
 | PUT | `/api/admission/cycles/:id/seats/:gradeId` | Update config |
 
-#### Applications
+### Applications
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/admission/applications` | List all applications |
@@ -201,7 +241,7 @@ Preferred communication style: Simple, everyday language.
 | PATCH | `/api/admission/applications/:id/status` | Update status |
 | GET | `/api/admission/applications/:id/status-history` | Status history |
 
-#### Documents
+### Documents
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/admission/applications/:id/documents` | List documents |
@@ -209,7 +249,7 @@ Preferred communication style: Simple, everyday language.
 | PATCH | `/api/admission/applications/:id/documents/:docId/verify` | Verify document |
 | DELETE | `/api/admission/applications/:id/documents/:docId` | Delete document |
 
-#### Screening
+### Screening
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/admission/applications/:id/entrance-test` | Schedule test |
@@ -217,7 +257,7 @@ Preferred communication style: Simple, everyday language.
 | POST | `/api/admission/applications/:id/interview` | Schedule interview |
 | PUT | `/api/admission/applications/:id/interview/result` | Record result |
 
-#### Enrollment
+### Enrollment
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/admission/applications/:id/offer` | Generate offer |
@@ -225,7 +265,21 @@ Preferred communication style: Simple, everyday language.
 | POST | `/api/admission/applications/:id/enroll` | Complete enrollment |
 | GET | `/api/admission/applications/:id/offer-letter` | Get offer letter data |
 
-#### Reports
+### Communications
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admission/applications/:id/communications` | Get communications |
+| POST | `/api/admission/applications/:id/communications` | Add communication |
+
+### Notifications
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/notifications` | Get all notifications |
+| GET | `/api/notifications/unread-count` | Get unread count |
+| PATCH | `/api/notifications/:id/read` | Mark as read |
+| PATCH | `/api/notifications/mark-all-read` | Mark all as read |
+
+### Reports
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/reports/application-summary` | Application summary |
@@ -234,7 +288,7 @@ Preferred communication style: Simple, everyday language.
 | GET | `/api/reports/entrance-test-results` | Test results |
 | GET | `/api/reports/rejection-analysis` | Rejection analysis |
 
-#### Dashboard & Analytics
+### Dashboard & Analytics
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/dashboard/stats` | Dashboard statistics |
@@ -242,19 +296,55 @@ Preferred communication style: Simple, everyday language.
 | GET | `/api/analytics/application-trends` | Application trends |
 | GET | `/api/analytics/scheduled-events` | Upcoming events |
 
-#### AI Features
+### AI Features
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/ai/recommendations/:id` | Get AI recommendations |
 | GET | `/api/ai/eligibility-score/:id` | Get eligibility score |
 | GET | `/api/ai/document-suggestions/:id` | Document suggestions |
 | GET | `/api/ai/waitlist-priority` | Waitlist prioritization |
+| GET | `/api/ai/next-steps/:id` | Get auto-suggested next steps |
+| GET | `/api/ai/predictive-score/:id` | Predictive outcome score |
 
-### Design Patterns
+## Design Patterns
 - **Storage Interface Pattern**: `IStorage` interface in `storage.ts` abstracts database operations for testability
 - **Query Key Convention**: React Query uses URL paths as query keys for automatic cache invalidation
 - **Component Composition**: UI built from small, composable shadcn/ui components
 - **Path Aliases**: `@/` maps to client/src, `@shared/` maps to shared directory
+- **AI-First Approach**: AI recommendations integrated throughout the application workflow
+
+## AI Features Detailed
+
+### Smart Recommendations
+The system provides context-aware recommendations based on:
+- Current application status
+- Document verification state
+- Screening results (entrance test, interview)
+- Seat availability
+- Application timeline
+
+### Eligibility Scoring
+Multi-factor scoring system (0-100 points):
+- **Age Eligibility**: 20 points max
+- **Document Completion**: 30 points max
+- **Entrance Test**: 25 points max
+- **Interview**: 25 points max
+
+Confidence levels: High (75+), Medium (45-74), Low (<45)
+
+### Document Suggestions
+Intelligent document tracking:
+- Required documents (Birth Certificate, Passport Photo, Address Proof)
+- Recommended documents (Transfer Certificate, Previous Report Card)
+- Optional documents (Category Certificate, Medical Certificate)
+- Verification status tracking with action suggestions
+
+### Waitlist Prioritization
+Priority scoring factors:
+- Entrance test performance (up to +20 points)
+- Interview performance (up to +20 points)
+- Previous academic record (up to +10 points)
+- Early applicant bonus (+5 points)
 
 ## External Dependencies
 
@@ -286,3 +376,105 @@ Preferred communication style: Simple, everyday language.
 - **tsx**: TypeScript execution for Node.js
 - **esbuild**: Production bundling for server code
 - **drizzle-kit**: Database migration tooling
+
+## Application Status Workflow
+
+```
+┌─────────────┐
+│   INQUIRY   │ (Optional starting point)
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────────┐
+│ APPLICATION_SUBMITTED│ (Main entry point)
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  DOCUMENTS_PENDING  │◄────────────┐
+└──────────┬──────────┘             │
+           │                        │
+           ▼                        │
+┌─────────────────────┐    ┌───────┴────────┐
+│ DOCUMENTS_VERIFIED  │    │ Document Rejected│
+└──────────┬──────────┘    └────────────────┘
+           │
+           ▼
+┌─────────────────────┐
+│ ENTRANCE_TEST_      │
+│ SCHEDULED           │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│ ENTRANCE_TEST_      │
+│ COMPLETED           │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│ INTERVIEW_SCHEDULED │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│ INTERVIEW_COMPLETED │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│    UNDER_REVIEW     │
+└──────────┬──────────┘
+           │
+     ┌─────┴─────┬────────────┐
+     ▼           ▼            ▼
+┌─────────┐ ┌─────────┐ ┌─────────┐
+│ OFFER   │ │WAITLIST │ │REJECTED │
+│EXTENDED │ │ED       │ └─────────┘
+└────┬────┘ └─────────┘
+     │
+     ▼
+┌─────────────────────┐
+│   OFFER_ACCEPTED    │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│      ENROLLED       │ (Final success state)
+└─────────────────────┘
+
+Additional state: WITHDRAWN (can occur from any state)
+```
+
+## Document Types Supported
+
+| Type | Label | Priority |
+|------|-------|----------|
+| birth_certificate | Birth Certificate | Required |
+| passport_photo | Passport Photo | Required |
+| address_proof | Address Proof | Required |
+| transfer_certificate | Transfer Certificate | Recommended |
+| previous_report_card | Previous Report Card | Recommended |
+| category_certificate | Category Certificate | Optional |
+| medical_certificate | Medical Certificate | Optional |
+| other | Other Documents | Optional |
+
+## Communication Types
+
+| Type | Description |
+|------|-------------|
+| call | Phone call with parent/guardian |
+| email | Email correspondence |
+| meeting | In-person or virtual meeting |
+| sms | SMS/Text message |
+| note | Internal notes/observations |
+
+## Notification Types
+
+| Type | Description |
+|------|-------------|
+| reminder | Deadline reminders |
+| status_change | Application status updates |
+| deadline | Upcoming deadline alerts |
+| document | Document-related notifications |
+| system | System-level notifications |
