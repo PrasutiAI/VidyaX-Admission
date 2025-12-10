@@ -37,15 +37,13 @@ interface AIRecommendationsData {
 }
 
 interface EligibilityScoreData {
-  overallScore: number;
-  breakdown: {
-    category: string;
-    score: number;
-    maxScore: number;
-    notes: string;
-  }[];
+  totalScore: number;
+  overallScore?: number;
+  breakdown: Record<string, number>;
   recommendation: string;
-  confidence: "high" | "medium" | "low";
+  confidence: number | "high" | "medium" | "low";
+  aiModel?: string;
+  aiPowered?: boolean;
 }
 
 interface DocumentSuggestion {
@@ -226,23 +224,29 @@ export function AIRecommendationsPanel({ applicationId }: { applicationId: strin
                       <span className="font-medium text-sm">Eligibility Score</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-2xl font-bold">{eligibility.overallScore}</span>
+                      <span className="text-2xl font-bold">{eligibility.totalScore || eligibility.overallScore || 0}</span>
                       <span className="text-muted-foreground">/100</span>
                     </div>
                   </div>
-                  <Progress value={eligibility.overallScore} className="h-2" />
+                  <Progress value={eligibility.totalScore || eligibility.overallScore || 0} className="h-2" />
                   <div className="grid grid-cols-2 gap-2 text-xs">
-                    {eligibility.breakdown.map((item) => (
-                      <div key={item.category} className="flex items-center justify-between p-2 rounded bg-muted/50">
-                        <span className="text-muted-foreground">{item.category}</span>
-                        <span className="font-medium">{item.score}/{item.maxScore}</span>
+                    {Object.entries(eligibility.breakdown || {}).map(([category, score]) => (
+                      <div key={category} className="flex items-center justify-between p-2 rounded bg-muted/50">
+                        <span className="text-muted-foreground">{category.replace(/([A-Z])/g, ' $1').trim()}</span>
+                        <span className="font-medium">{score}/25</span>
                       </div>
                     ))}
                   </div>
                   <div className="pt-2 border-t">
                     <div className="flex items-start gap-2">
-                      <Badge variant="outline" className={`${confidenceColors[eligibility.confidence]} text-xs border-current`}>
-                        {eligibility.confidence.toUpperCase()} Confidence
+                      <Badge variant="outline" className={`${
+                        typeof eligibility.confidence === 'number' 
+                          ? (eligibility.confidence >= 0.8 ? confidenceColors.high : eligibility.confidence >= 0.6 ? confidenceColors.medium : confidenceColors.low)
+                          : confidenceColors[eligibility.confidence]
+                      } text-xs border-current`}>
+                        {typeof eligibility.confidence === 'number' 
+                          ? `${Math.round(eligibility.confidence * 100)}% CONFIDENCE`
+                          : `${eligibility.confidence.toUpperCase()} Confidence`}
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground mt-2">{eligibility.recommendation}</p>
