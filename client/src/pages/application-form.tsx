@@ -104,12 +104,39 @@ export default function ApplicationForm() {
 
   const openCycles = cycles?.filter(c => c.status === "open") || [];
 
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const uploadDocuments = async (applicationId: string) => {
+    for (const doc of uploadedDocs) {
+      try {
+        const base64Url = await fileToBase64(doc.file);
+        await apiRequest("POST", `/api/admission/applications/${applicationId}/documents`, {
+          documentType: doc.type,
+          fileName: doc.fileName,
+          fileUrl: base64Url,
+        });
+      } catch (error) {
+        console.error(`Failed to upload document: ${doc.fileName}`, error);
+      }
+    }
+  };
+
   const submitMutation = useMutation({
     mutationFn: async (data: any) => {
       const response = await apiRequest("POST", "/api/admission/applications", data);
       return response.json();
     },
-    onSuccess: (data: any) => {
+    onSuccess: async (data: any) => {
+      if (uploadedDocs.length > 0) {
+        await uploadDocuments(data.id);
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/admission/applications"] });
       toast({ 
         title: "Application Submitted Successfully", 

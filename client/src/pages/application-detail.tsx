@@ -20,6 +20,7 @@ import {
   MessageSquare,
   Download,
   Printer,
+  Eye,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -123,6 +124,8 @@ export default function ApplicationDetail() {
   const [docVerifyRemarks, setDocVerifyRemarks] = useState("");
   const [newNote, setNewNote] = useState({ type: "note" as const, content: "" });
   const [isOfferLetterDialogOpen, setIsOfferLetterDialogOpen] = useState(false);
+  const [selectedDocType, setSelectedDocType] = useState("");
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
 
   const { data: application, isLoading } = useQuery<ApplicationWithRelations>({
     queryKey: ["/api/admission/applications", params.id],
@@ -224,6 +227,38 @@ export default function ApplicationDetail() {
     setDocVerifyAction(action);
     setDocVerifyRemarks("");
     setIsDocVerifyDialogOpen(true);
+  };
+
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedDocType) return;
+    
+    setIsUploadingDoc(true);
+    try {
+      const base64Url = await fileToBase64(file);
+      await apiRequest("POST", `/api/admission/applications/${params.id}/documents`, {
+        documentType: selectedDocType,
+        fileName: file.name,
+        fileUrl: base64Url,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admission/applications", params.id] });
+      toast({ title: "Document uploaded successfully" });
+      setSelectedDocType("");
+      e.target.value = "";
+    } catch (error: any) {
+      toast({ title: "Failed to upload document", description: error.message, variant: "destructive" });
+    } finally {
+      setIsUploadingDoc(false);
+    }
   };
 
   if (isLoading) {
@@ -429,7 +464,47 @@ export default function ApplicationDetail() {
                   <CardTitle className="text-lg font-medium">Uploaded Documents</CardTitle>
                   <CardDescription>Review and verify submitted documents</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
+                  <div className="rounded-lg border p-4 space-y-3">
+                    <Label>Upload New Document</Label>
+                    <div className="flex gap-2 flex-wrap">
+                      <Select value={selectedDocType} onValueChange={setSelectedDocType}>
+                        <SelectTrigger className="w-[200px]" data-testid="select-doc-type">
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="birth_certificate">Birth Certificate</SelectItem>
+                          <SelectItem value="report_card">Previous Report Card</SelectItem>
+                          <SelectItem value="transfer_certificate">Transfer Certificate</SelectItem>
+                          <SelectItem value="passport_photo">Passport Photo</SelectItem>
+                          <SelectItem value="address_proof">Address Proof</SelectItem>
+                          <SelectItem value="category_certificate">Category Certificate</SelectItem>
+                          <SelectItem value="medical_certificate">Medical Certificate</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <input
+                        type="file"
+                        id="doc-upload"
+                        onChange={handleDocumentUpload}
+                        disabled={!selectedDocType || isUploadingDoc}
+                        className="hidden"
+                        data-testid="input-doc-upload"
+                      />
+                      <label htmlFor="doc-upload">
+                        <Button 
+                          variant="outline" 
+                          disabled={!selectedDocType || isUploadingDoc}
+                          asChild
+                        >
+                          <span>
+                            <FileText className="h-4 w-4 mr-2" />
+                            {isUploadingDoc ? "Uploading..." : "Choose File"}
+                          </span>
+                        </Button>
+                      </label>
+                    </div>
+                  </div>
                   {application.documents && application.documents.length > 0 ? (
                     <div className="space-y-3">
                       {application.documents.map((doc) => (
@@ -450,6 +525,15 @@ export default function ApplicationDetail() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => window.open(doc.fileUrl, "_blank")}
+                              data-testid={`button-view-doc-${doc.id}`}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              View
+                            </Button>
                             {doc.verificationStatus === "pending" ? (
                               <>
                                 <Button 
