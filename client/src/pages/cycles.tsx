@@ -329,112 +329,208 @@ function CycleFormDialog({ open, onOpenChange, cycle, onSubmit, isPending }: Cyc
     status: cycle?.status || "draft",
     applicationFeeAmount: cycle?.applicationFeeAmount || "500",
   });
+  const [isReviewMode, setIsReviewMode] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleContinueToReview = (e: React.FormEvent) => {
     e.preventDefault();
+    setIsReviewMode(true);
+  };
+
+  const handleSubmit = () => {
     onSubmit(formData as InsertAdmissionCycle);
   };
 
+  const handleClose = (openState: boolean) => {
+    if (!openState) {
+      setIsReviewMode(false);
+    }
+    onOpenChange(openState);
+  };
+
+  const statusLabel = {
+    draft: "Draft",
+    open: "Open",
+    closed: "Closed",
+    archived: "Archived",
+  }[formData.status || "draft"];
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{cycle ? "Edit Cycle" : "Create Admission Cycle"}</DialogTitle>
-          <DialogDescription>
-            {cycle ? "Update the admission cycle details" : "Set up a new admission cycle for applicants"}
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-4 py-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="cycleName">Cycle Name *</Label>
-                <Input
-                  id="cycleName"
-                  placeholder="e.g., Fall Admissions 2025"
-                  value={formData.cycleName}
-                  onChange={(e) => setFormData({ ...formData, cycleName: e.target.value })}
-                  required
-                  data-testid="input-cycle-name"
-                />
+        {!isReviewMode ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>{cycle ? "Edit Cycle" : "Create Admission Cycle"}</DialogTitle>
+              <DialogDescription>
+                {cycle ? "Update the admission cycle details" : "Set up a new admission cycle for applicants"}
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleContinueToReview}>
+              <div className="space-y-4 py-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="cycleName">Cycle Name *</Label>
+                    <Input
+                      id="cycleName"
+                      placeholder="e.g., Fall Admissions 2025"
+                      value={formData.cycleName}
+                      onChange={(e) => setFormData({ ...formData, cycleName: e.target.value })}
+                      required
+                      data-testid="input-cycle-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="academicYear">Academic Year *</Label>
+                    <Input
+                      id="academicYear"
+                      placeholder="e.g., 2025-2026"
+                      value={formData.academicYear}
+                      onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}
+                      required
+                      data-testid="input-academic-year"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="startDate">Start Date *</Label>
+                    <Input
+                      id="startDate"
+                      type="date"
+                      value={formData.startDate}
+                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                      required
+                      data-testid="input-start-date"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="endDate">End Date *</Label>
+                    <Input
+                      id="endDate"
+                      type="date"
+                      value={formData.endDate}
+                      onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                      required
+                      data-testid="input-end-date"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="status">Status</Label>
+                    <Select 
+                      value={formData.status} 
+                      onValueChange={(value) => setFormData({ ...formData, status: value as any })}
+                    >
+                      <SelectTrigger id="status" data-testid="select-status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="draft">Draft</SelectItem>
+                        <SelectItem value="open">Open</SelectItem>
+                        <SelectItem value="closed">Closed</SelectItem>
+                        <SelectItem value="archived">Archived</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="applicationFee">Application Fee</Label>
+                    <Input
+                      id="applicationFee"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.applicationFeeAmount}
+                      onChange={(e) => setFormData({ ...formData, applicationFeeAmount: e.target.value })}
+                      data-testid="input-application-fee"
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="academicYear">Academic Year *</Label>
-                <Input
-                  id="academicYear"
-                  placeholder="e.g., 2025-2026"
-                  value={formData.academicYear}
-                  onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}
-                  required
-                  data-testid="input-academic-year"
-                />
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="startDate">Start Date *</Label>
-                <Input
-                  id="startDate"
-                  type="date"
-                  value={formData.startDate}
-                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                  required
-                  data-testid="input-start-date"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="endDate">End Date *</Label>
-                <Input
-                  id="endDate"
-                  type="date"
-                  value={formData.endDate}
-                  onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                  required
-                  data-testid="input-end-date"
-                />
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select 
-                  value={formData.status} 
-                  onValueChange={(value) => setFormData({ ...formData, status: value as any })}
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => handleClose(false)} data-testid="button-cancel">
+                  Cancel
+                </Button>
+                <Button type="submit" data-testid="button-continue-review">
+                  Continue to Review
+                </Button>
+              </DialogFooter>
+            </form>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <div className="flex items-center justify-between gap-2">
+                <DialogTitle>Review & Submit</DialogTitle>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => setIsReviewMode(false)}
+                  data-testid="button-edit-review"
                 >
-                  <SelectTrigger id="status" data-testid="select-status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="open">Open</SelectItem>
-                    <SelectItem value="closed">Closed</SelectItem>
-                    <SelectItem value="archived">Archived</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <Pencil className="h-4 w-4" />
+                </Button>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="applicationFee">Application Fee</Label>
-                <Input
-                  id="applicationFee"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.applicationFeeAmount}
-                  onChange={(e) => setFormData({ ...formData, applicationFeeAmount: e.target.value })}
-                  data-testid="input-application-fee"
-                />
+              <DialogDescription>
+                Review your admission cycle details before submitting
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="rounded-md border p-4 space-y-3">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Cycle Name</p>
+                    <p className="font-medium" data-testid="review-cycle-name">{formData.cycleName}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Academic Year</p>
+                    <p className="font-medium" data-testid="review-academic-year">{formData.academicYear}</p>
+                  </div>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Start Date</p>
+                    <p className="font-medium" data-testid="review-start-date">
+                      {formData.startDate ? format(new Date(formData.startDate), "MMM d, yyyy") : "-"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">End Date</p>
+                    <p className="font-medium" data-testid="review-end-date">
+                      {formData.endDate ? format(new Date(formData.endDate), "MMM d, yyyy") : "-"}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Status</p>
+                    <Badge 
+                      variant="outline" 
+                      className={`${statusColors[formData.status || "draft"]?.bg} ${statusColors[formData.status || "draft"]?.text} border-0`}
+                      data-testid="review-status"
+                    >
+                      {statusLabel}
+                    </Badge>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Application Fee</p>
+                    <p className="font-medium" data-testid="review-application-fee">
+                      {formData.applicationFeeAmount ? `$${formData.applicationFeeAmount}` : "-"}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel">
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isPending} data-testid="button-submit">
-              {isPending ? "Saving..." : cycle ? "Update Cycle" : "Create Cycle"}
-            </Button>
-          </DialogFooter>
-        </form>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsReviewMode(false)} data-testid="button-back-edit">
+                Back to Edit
+              </Button>
+              <Button onClick={handleSubmit} disabled={isPending} data-testid="button-submit">
+                {isPending ? "Saving..." : cycle ? "Update Cycle" : "Create Cycle"}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
