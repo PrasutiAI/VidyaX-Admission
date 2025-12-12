@@ -1794,6 +1794,24 @@ export async function registerRoutes(
     }
   });
 
+  // AI Cache Statistics Endpoint (v4.2)
+  app.get("/api/ai/cache-stats", async (req, res) => {
+    try {
+      const { getCacheStats, getAIConfig } = await import("./openai");
+      const stats = getCacheStats();
+      const config = getAIConfig();
+      res.json({
+        cacheEnabled: config.cacheEnabled,
+        cacheTTLMs: config.cacheTTLMs,
+        maxCacheEntries: config.maxCacheEntries,
+        ...stats,
+        version: config.version,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   return httpServer;
 }
 

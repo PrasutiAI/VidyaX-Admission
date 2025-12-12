@@ -22,6 +22,46 @@ const AI_CONFIG = {
   batchSize: 10,
 };
 
+interface CacheStats {
+  totalEntries: number;
+  hitCount: number;
+  missCount: number;
+  hitRate: number;
+  oldestEntry: string | null;
+  newestEntry: string | null;
+}
+
+let cacheHitCount = 0;
+let cacheMissCount = 0;
+
+export function getCacheStats(): CacheStats {
+  let oldestTimestamp = Infinity;
+  let newestTimestamp = 0;
+  let oldestKey: string | null = null;
+  let newestKey: string | null = null;
+  
+  for (const [key, entry] of aiCache.entries()) {
+    if (entry.timestamp < oldestTimestamp) {
+      oldestTimestamp = entry.timestamp;
+      oldestKey = key;
+    }
+    if (entry.timestamp > newestTimestamp) {
+      newestTimestamp = entry.timestamp;
+      newestKey = key;
+    }
+  }
+  
+  const totalRequests = cacheHitCount + cacheMissCount;
+  return {
+    totalEntries: aiCache.size,
+    hitCount: cacheHitCount,
+    missCount: cacheMissCount,
+    hitRate: totalRequests > 0 ? Math.round((cacheHitCount / totalRequests) * 100) : 0,
+    oldestEntry: oldestKey,
+    newestEntry: newestKey,
+  };
+}
+
 const isOpenAIConfigured = !!process.env.OPENAI_API_KEY;
 
 const openai = isOpenAIConfigured 
@@ -41,13 +81,21 @@ function getCacheKey(feature: string, applicationId?: string, dataHash?: string)
 }
 
 function getFromCache<T>(key: string): T | null {
-  if (!AI_CONFIG.cacheEnabled) return null;
-  const entry = aiCache.get(key);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) {
-    aiCache.delete(key);
+  if (!AI_CONFIG.cacheEnabled) {
+    cacheMissCount++;
     return null;
   }
+  const entry = aiCache.get(key);
+  if (!entry) {
+    cacheMissCount++;
+    return null;
+  }
+  if (Date.now() > entry.expiresAt) {
+    aiCache.delete(key);
+    cacheMissCount++;
+    return null;
+  }
+  cacheHitCount++;
   return entry.data as T;
 }
 
