@@ -1,7 +1,7 @@
 # Student Admission Management Service
 
 ## Overview
-This project is an **enterprise-grade, AI-first** full-stack TypeScript application designed to manage the complete student admission lifecycle, from initial inquiry to final enrollment. It features a React frontend and an Express.js backend, providing a comprehensive administrative dashboard for managing admission cycles, student applications, seat configurations, document tracking, and intelligent decision support. The system is powered by **OpenAI GPT-5** for advanced AI capabilities and is **fully configurable** for any educational institution type. Its purpose is to streamline admission processes, enhance decision-making with AI insights, and provide a robust platform for educational institutions.
+This project is an **enterprise-grade, AI-first** full-stack TypeScript application designed to manage the complete student admission lifecycle, from initial inquiry to final enrollment. It features a React frontend and an Express.js backend, providing a comprehensive administrative dashboard for managing admission cycles, student applications, seat configurations, document tracking, and intelligent decision support. The system is powered by **OpenAI GPT-4o-mini** for advanced AI capabilities with intelligent rule-based fallback and is **fully configurable** for any educational institution type. Its purpose is to streamline admission processes, enhance decision-making with AI insights, and provide a robust platform for educational institutions.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -70,7 +70,7 @@ The AI system incorporates enterprise-grade governance including:
 - Rejection analysis
 - AI insights reports
 
-#### AI-First Features (Powered by OpenAI GPT-5)
+#### AI-First Features (Powered by OpenAI GPT-4o-mini)
 - **Recommendations**: Smart, actionable recommendations per application
 - **Eligibility Scoring**: 0-100 score with category breakdown
 - **Predictive Analytics**: Enrollment probability prediction
@@ -138,7 +138,7 @@ The AI system incorporates enterprise-grade governance including:
 - **Drizzle ORM**: For type-safe database operations and migrations
 
 ### AI Integration
-- **OpenAI GPT-5**: Powers all AI features with structured JSON responses
+- **OpenAI GPT-4o-mini**: Powers all AI features with structured JSON responses
 - **Fallback Engine**: Rule-based fallback mechanism for 100% availability
 
 ### UI Component Libraries
