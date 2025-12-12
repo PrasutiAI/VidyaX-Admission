@@ -6,7 +6,7 @@ This project is an **enterprise-grade, AI-first** full-stack TypeScript applicat
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
-## Current Version: 4.1.0
+## Current Version: 4.4.0
 
 ### Key Statistics
 - 106 API endpoints implemented
@@ -228,13 +228,25 @@ Start command: `npm run dev`
 
 ## Recent Changes
 
+### Version 4.4.0 (December 12, 2025)
+- **Adaptive Token Budgets**: Dynamic token allocation based on complexity (256/512/1024)
+- **Throughput Tracking**: Requests-per-second monitoring with getThroughput()
+- **Error Rate Tracking**: AI failure rate monitoring with getErrorRate()
+- **Per-Feature Latency**: Average latency tracking per AI feature
+- **Token Savings Tracking**: Monitor token optimization effectiveness
+- **Fixed Request Metrics**: Only count actual OpenAI API calls
+
+### Version 4.3.0 (December 12, 2025)
+- LRU cache eviction with configurable max entries
+- Request deduplication for concurrent identical requests
+- Compressed prompt templates
+
 ### Version 4.1.0 (December 12, 2025)
 - **Performance Optimization**: Compressed AI prompts reduce token usage by 60%+
 - **Response Caching**: Multi-level cache system (30s, 2min, 5min TTLs)
 - **N+1 Query Elimination**: Batch loading for applications with documents
 - **Consolidated Endpoints**: New `/api/dashboard/consolidated` reduces frontend API calls
 - **AI Configuration**: Updated to gpt-4o-mini with optimized settings
-- **Documentation**: Enhanced IMPLEMENTATION_1765308324472.md with v4.1 features
 
 ### Version 4.0.0 (December 2025)
 - Enhanced FEATURES.md with comprehensive documentation
