@@ -3,13 +3,14 @@ import type { AdmissionApplication, ApplicationDocument } from "@shared/schema";
 
 const AI_CONFIG = {
   model: "gpt-4o-mini",
-  version: "4.4.0",
+  version: "4.5.0",
   temperature: 0.3,
   maxTokens: 512,
   tokenBudgets: {
-    simple: 256,
-    standard: 512,
-    complex: 1024,
+    simple: 192,      // Further optimized for simple operations
+    standard: 384,    // Reduced from 512 for cost efficiency
+    complex: 768,     // Reduced from 1024 for better efficiency
+    bulk: 128,        // New: minimal tokens for batch operations
   },
   confidenceThresholds: {
     recommendations: 0.70,
@@ -33,6 +34,15 @@ const AI_CONFIG = {
   parallelBatching: true,
   throughputTracking: true,
   errorRateTracking: true,
+  // v4.5.0 New features
+  circuitBreakerEnabled: true,
+  circuitBreakerThreshold: 5,     // Number of failures before opening circuit
+  circuitBreakerResetMs: 30000,   // Time to wait before retry after circuit opens
+  promptCompressionLevel: 2,      // 0=none, 1=basic, 2=aggressive
+  responseValidation: true,
+  smartRetry: true,
+  maxRetries: 2,
+  retryDelayMs: 1000,
 };
 
 interface CacheStats {
@@ -51,9 +61,33 @@ interface CacheStats {
   errorRate: number;
   tokenStats: {
     totalTokensSaved: number;
-    adaptiveUsage: { simple: number; standard: number; complex: number };
+    adaptiveUsage: { simple: number; standard: number; complex: number; bulk: number };
+  };
+  circuitBreaker: {
+    state: 'closed' | 'open' | 'half-open';
+    failures: number;
+    lastFailureTime: number | null;
+  };
+  retryStats: {
+    totalRetries: number;
+    successfulRetries: number;
   };
 }
+
+// v4.5.0 Circuit Breaker State
+interface CircuitBreakerState {
+  state: 'closed' | 'open' | 'half-open';
+  failures: number;
+  lastFailureTime: number | null;
+  successCount: number;
+}
+
+const circuitBreaker: CircuitBreakerState = {
+  state: 'closed',
+  failures: 0,
+  lastFailureTime: null,
+  successCount: 0,
+};
 
 let cacheHitCount = 0;
 let cacheMissCount = 0;
@@ -65,8 +99,119 @@ let errorCount = 0;
 let requestCount = 0;
 let requestStartTime = Date.now();
 let tokensSaved = 0;
-const adaptiveTokenUsage = { simple: 0, standard: 0, complex: 0 };
+let totalRetries = 0;
+let successfulRetries = 0;
+const adaptiveTokenUsage = { simple: 0, standard: 0, complex: 0, bulk: 0 };
 const featureStats: Record<string, { hits: number; misses: number; totalLatency: number; count: number }> = {};
+
+// v4.5.0 Circuit Breaker Functions
+function checkCircuitBreaker(): boolean {
+  if (!AI_CONFIG.circuitBreakerEnabled) return true;
+  
+  const now = Date.now();
+  
+  if (circuitBreaker.state === 'open') {
+    if (circuitBreaker.lastFailureTime && 
+        (now - circuitBreaker.lastFailureTime) >= AI_CONFIG.circuitBreakerResetMs) {
+      circuitBreaker.state = 'half-open';
+      circuitBreaker.successCount = 0;
+      return true;
+    }
+    return false;
+  }
+  
+  return true;
+}
+
+function recordCircuitSuccess(): void {
+  if (!AI_CONFIG.circuitBreakerEnabled) return;
+  
+  if (circuitBreaker.state === 'half-open') {
+    circuitBreaker.successCount++;
+    if (circuitBreaker.successCount >= 2) {
+      circuitBreaker.state = 'closed';
+      circuitBreaker.failures = 0;
+      circuitBreaker.lastFailureTime = null;
+    }
+  } else if (circuitBreaker.state === 'closed') {
+    circuitBreaker.failures = Math.max(0, circuitBreaker.failures - 1);
+  }
+}
+
+function recordCircuitFailure(): void {
+  if (!AI_CONFIG.circuitBreakerEnabled) return;
+  
+  circuitBreaker.failures++;
+  circuitBreaker.lastFailureTime = Date.now();
+  
+  if (circuitBreaker.failures >= AI_CONFIG.circuitBreakerThreshold) {
+    circuitBreaker.state = 'open';
+    console.log(`[AI Circuit Breaker] Circuit OPENED after ${circuitBreaker.failures} failures`);
+  }
+}
+
+// v4.5.0 Enhanced Prompt Compression
+function compressPrompt(text: string, level: number = AI_CONFIG.promptCompressionLevel): string {
+  if (level === 0) return text;
+  
+  let compressed = text;
+  
+  // Level 1: Basic compression - remove extra whitespace
+  compressed = compressed.replace(/\s+/g, ' ').trim();
+  compressed = compressed.replace(/\n\s*\n/g, '\n');
+  
+  if (level >= 2) {
+    // Level 2: Aggressive compression - abbreviations and symbol replacements
+    compressed = compressed.replace(/Application/g, 'App');
+    compressed = compressed.replace(/document/gi, 'doc');
+    compressed = compressed.replace(/verification/gi, 'verif');
+    compressed = compressed.replace(/entrance test/gi, 'ET');
+    compressed = compressed.replace(/interview/gi, 'int');
+    compressed = compressed.replace(/scheduled/gi, 'sched');
+    compressed = compressed.replace(/completed/gi, 'done');
+    compressed = compressed.replace(/recommendation/gi, 'rec');
+    compressed = compressed.replace(/previous/gi, 'prev');
+    compressed = compressed.replace(/academic/gi, 'acad');
+    compressed = compressed.replace(/: /g, ':');
+    compressed = compressed.replace(/ - /g, '-');
+  }
+  
+  return compressed;
+}
+
+// v4.5.0 Smart Retry with Exponential Backoff
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  feature: string
+): Promise<T> {
+  if (!AI_CONFIG.smartRetry) {
+    return fn();
+  }
+  
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= AI_CONFIG.maxRetries; attempt++) {
+    try {
+      const result = await fn();
+      if (attempt > 0) {
+        successfulRetries++;
+        console.log(`[AI Retry] ${feature} succeeded on attempt ${attempt + 1}`);
+      }
+      return result;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      if (attempt < AI_CONFIG.maxRetries) {
+        totalRetries++;
+        const delay = AI_CONFIG.retryDelayMs * Math.pow(2, attempt);
+        console.log(`[AI Retry] ${feature} failed, retrying in ${delay}ms (attempt ${attempt + 1})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError;
+}
 
 // v4.3.0 Request deduplication - prevents duplicate concurrent API calls
 const pendingRequests = new Map<string, Promise<any>>();
@@ -103,7 +248,7 @@ function trackRequest(isError: boolean = false): void {
   }
 }
 
-function getTokenBudget(complexity: 'simple' | 'standard' | 'complex'): number {
+function getTokenBudget(complexity: 'simple' | 'standard' | 'complex' | 'bulk'): number {
   if (!AI_CONFIG.adaptiveTokens) {
     return AI_CONFIG.tokenBudgets.standard;
   }
@@ -198,6 +343,15 @@ export function getCacheStats(): CacheStats {
       totalTokensSaved: tokensSaved,
       adaptiveUsage: { ...adaptiveTokenUsage },
     },
+    circuitBreaker: {
+      state: circuitBreaker.state,
+      failures: circuitBreaker.failures,
+      lastFailureTime: circuitBreaker.lastFailureTime,
+    },
+    retryStats: {
+      totalRetries,
+      successfulRetries,
+    },
   };
 }
 
@@ -212,9 +366,16 @@ export function resetCacheStats(): void {
   requestCount = 0;
   requestStartTime = Date.now();
   tokensSaved = 0;
+  totalRetries = 0;
+  successfulRetries = 0;
   adaptiveTokenUsage.simple = 0;
   adaptiveTokenUsage.standard = 0;
   adaptiveTokenUsage.complex = 0;
+  adaptiveTokenUsage.bulk = 0;
+  circuitBreaker.state = 'closed';
+  circuitBreaker.failures = 0;
+  circuitBreaker.lastFailureTime = null;
+  circuitBreaker.successCount = 0;
   Object.keys(featureStats).forEach(key => delete featureStats[key]);
 }
 
@@ -480,7 +641,7 @@ async function callOpenAI<T>(
   systemPrompt: string,
   feature: string,
   applicationId?: string,
-  complexity: 'simple' | 'standard' | 'complex' = 'standard'
+  complexity: 'simple' | 'standard' | 'complex' | 'bulk' = 'standard'
 ): Promise<{ result: T | null; latencyMs: number; error?: string }> {
   const startTime = Date.now();
   
@@ -490,39 +651,62 @@ async function callOpenAI<T>(
     return { result: null, latencyMs, error: "OpenAI not configured" };
   }
 
+  // v4.5.0: Check circuit breaker before making request
+  if (!checkCircuitBreaker()) {
+    const latencyMs = Date.now() - startTime;
+    trackLatency(latencyMs);
+    trackRequest(true); // Count as failed request
+    console.log(`[AI Circuit Breaker] Request blocked for ${feature} - circuit is OPEN`);
+    return { result: null, latencyMs, error: "Circuit breaker open - service temporarily unavailable" };
+  }
+
   const requestKey = `openai:${feature}:${applicationId || 'global'}`;
   const tokenBudget = getTokenBudget(complexity);
   
+  // v4.5.0: Apply prompt compression before any processing
+  const compressedPrompt = compressPrompt(prompt);
+  const compressedSystemPrompt = compressPrompt(systemPrompt);
+  const sanitizedPrompt = sanitizePII(compressedPrompt);
+  
   try {
     trackRequest(false);
+    
+    // v4.5.0: Deduplication wraps retry to prevent duplicate concurrent calls
+    // Retries happen inside a single deduplicated request
     const result = await deduplicateRequest(requestKey, async () => {
-      const sanitizedPrompt = sanitizePII(prompt);
-      
-      const response = await openai.chat.completions.create({
-        model: AI_CONFIG.model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: sanitizedPrompt },
-        ],
-        response_format: { type: "json_object" },
-        max_completion_tokens: tokenBudget,
-        temperature: AI_CONFIG.temperature,
-      });
+      return await withRetry(async () => {
+        const response = await openai.chat.completions.create({
+          model: AI_CONFIG.model,
+          messages: [
+            { role: "system", content: compressedSystemPrompt },
+            { role: "user", content: sanitizedPrompt },
+          ],
+          response_format: { type: "json_object" },
+          max_completion_tokens: tokenBudget,
+          temperature: AI_CONFIG.temperature,
+        });
 
-      const content = response.choices[0].message.content;
-      
-      if (!content) {
-        throw new Error("Empty response from OpenAI");
-      }
-      
-      return JSON.parse(content) as T;
+        const content = response.choices[0].message.content;
+        
+        if (!content) {
+          throw new Error("Empty response from OpenAI");
+        }
+        
+        return JSON.parse(content) as T;
+      }, feature);
     });
 
+    // v4.5.0: Record success for circuit breaker
+    recordCircuitSuccess();
+    
     const latencyMs = Date.now() - startTime;
     trackLatency(latencyMs);
     trackFeatureAccess(feature, false, latencyMs);
     return { result, latencyMs };
   } catch (error) {
+    // v4.5.0: Record failure for circuit breaker
+    recordCircuitFailure();
+    
     const latencyMs = Date.now() - startTime;
     trackLatency(latencyMs);
     trackRequest(true);
