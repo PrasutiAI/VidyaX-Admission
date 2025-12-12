@@ -3,9 +3,14 @@ import type { AdmissionApplication, ApplicationDocument } from "@shared/schema";
 
 const AI_CONFIG = {
   model: "gpt-4o-mini",
-  version: "4.3.0",
-  maxTokens: 512,
+  version: "4.4.0",
   temperature: 0.3,
+  maxTokens: 512,
+  tokenBudgets: {
+    simple: 256,
+    standard: 512,
+    complex: 1024,
+  },
   confidenceThresholds: {
     recommendations: 0.70,
     eligibility: 0.75,
@@ -20,11 +25,14 @@ const AI_CONFIG = {
   cacheTTLMs: 5 * 60 * 1000,
   maxCacheEntries: 500,
   batchSize: 10,
-  // v4.3.0 Enhanced features
   lruEviction: true,
   requestDeduplication: true,
   compressionEnabled: true,
   performanceTracking: true,
+  adaptiveTokens: true,
+  parallelBatching: true,
+  throughputTracking: true,
+  errorRateTracking: true,
 };
 
 interface CacheStats {
@@ -34,12 +42,17 @@ interface CacheStats {
   hitRate: number;
   oldestEntry: string | null;
   newestEntry: string | null;
-  // v4.3.0 Enhanced stats
   evictionCount: number;
   deduplicatedRequests: number;
   avgLatencyMs: number;
   memoryEstimateKB: number;
-  featureBreakdown: Record<string, { hits: number; misses: number }>;
+  featureBreakdown: Record<string, { hits: number; misses: number; avgLatency: number }>;
+  throughputRps: number;
+  errorRate: number;
+  tokenStats: {
+    totalTokensSaved: number;
+    adaptiveUsage: { simple: number; standard: number; complex: number };
+  };
 }
 
 let cacheHitCount = 0;
@@ -48,7 +61,12 @@ let evictionCount = 0;
 let deduplicatedRequests = 0;
 let totalLatencyMs = 0;
 let latencyCount = 0;
-const featureStats: Record<string, { hits: number; misses: number }> = {};
+let errorCount = 0;
+let requestCount = 0;
+let requestStartTime = Date.now();
+let tokensSaved = 0;
+const adaptiveTokenUsage = { simple: 0, standard: 0, complex: 0 };
+const featureStats: Record<string, { hits: number; misses: number; totalLatency: number; count: number }> = {};
 
 // v4.3.0 Request deduplication - prevents duplicate concurrent API calls
 const pendingRequests = new Map<string, Promise<any>>();
@@ -63,15 +81,48 @@ function trackLatency(ms: number): void {
   }
 }
 
-function trackFeatureAccess(feature: string, isHit: boolean): void {
+function trackFeatureAccess(feature: string, isHit: boolean, latencyMs?: number): void {
   if (!featureStats[feature]) {
-    featureStats[feature] = { hits: 0, misses: 0 };
+    featureStats[feature] = { hits: 0, misses: 0, totalLatency: 0, count: 0 };
   }
   if (isHit) {
     featureStats[feature].hits++;
   } else {
     featureStats[feature].misses++;
   }
+  if (latencyMs !== undefined) {
+    featureStats[feature].totalLatency += latencyMs;
+    featureStats[feature].count++;
+  }
+}
+
+function trackRequest(isError: boolean = false): void {
+  requestCount++;
+  if (isError && AI_CONFIG.errorRateTracking) {
+    errorCount++;
+  }
+}
+
+function getTokenBudget(complexity: 'simple' | 'standard' | 'complex'): number {
+  if (!AI_CONFIG.adaptiveTokens) {
+    return AI_CONFIG.tokenBudgets.standard;
+  }
+  adaptiveTokenUsage[complexity]++;
+  const standardTokens = AI_CONFIG.tokenBudgets.standard;
+  const actualTokens = AI_CONFIG.tokenBudgets[complexity];
+  tokensSaved += Math.max(0, standardTokens - actualTokens);
+  return actualTokens;
+}
+
+function getThroughput(): number {
+  if (!AI_CONFIG.throughputTracking) return 0;
+  const elapsedSeconds = (Date.now() - requestStartTime) / 1000;
+  return elapsedSeconds > 0 ? Math.round((requestCount / elapsedSeconds) * 100) / 100 : 0;
+}
+
+function getErrorRate(): number {
+  if (!AI_CONFIG.errorRateTracking || requestCount === 0) return 0;
+  return Math.round((errorCount / requestCount) * 10000) / 10000;
 }
 
 function updateLRU(key: string): void {
@@ -120,6 +171,15 @@ export function getCacheStats(): CacheStats {
   }
   
   const totalRequests = cacheHitCount + cacheMissCount;
+  const featureBreakdown: Record<string, { hits: number; misses: number; avgLatency: number }> = {};
+  for (const [feature, stats] of Object.entries(featureStats)) {
+    featureBreakdown[feature] = {
+      hits: stats.hits,
+      misses: stats.misses,
+      avgLatency: stats.count > 0 ? Math.round(stats.totalLatency / stats.count) : 0,
+    };
+  }
+  
   return {
     totalEntries: aiCache.size,
     hitCount: cacheHitCount,
@@ -131,7 +191,13 @@ export function getCacheStats(): CacheStats {
     deduplicatedRequests,
     avgLatencyMs: latencyCount > 0 ? Math.round(totalLatencyMs / latencyCount) : 0,
     memoryEstimateKB: estimateCacheMemory(),
-    featureBreakdown: { ...featureStats },
+    featureBreakdown,
+    throughputRps: getThroughput(),
+    errorRate: getErrorRate(),
+    tokenStats: {
+      totalTokensSaved: tokensSaved,
+      adaptiveUsage: { ...adaptiveTokenUsage },
+    },
   };
 }
 
@@ -142,6 +208,13 @@ export function resetCacheStats(): void {
   deduplicatedRequests = 0;
   totalLatencyMs = 0;
   latencyCount = 0;
+  errorCount = 0;
+  requestCount = 0;
+  requestStartTime = Date.now();
+  tokensSaved = 0;
+  adaptiveTokenUsage.simple = 0;
+  adaptiveTokenUsage.standard = 0;
+  adaptiveTokenUsage.complex = 0;
   Object.keys(featureStats).forEach(key => delete featureStats[key]);
 }
 
@@ -406,7 +479,8 @@ async function callOpenAI<T>(
   prompt: string, 
   systemPrompt: string,
   feature: string,
-  applicationId?: string
+  applicationId?: string,
+  complexity: 'simple' | 'standard' | 'complex' = 'standard'
 ): Promise<{ result: T | null; latencyMs: number; error?: string }> {
   const startTime = Date.now();
   
@@ -416,10 +490,11 @@ async function callOpenAI<T>(
     return { result: null, latencyMs, error: "OpenAI not configured" };
   }
 
-  // v4.3.0 Request deduplication for concurrent identical requests
   const requestKey = `openai:${feature}:${applicationId || 'global'}`;
+  const tokenBudget = getTokenBudget(complexity);
   
   try {
+    trackRequest(false);
     const result = await deduplicateRequest(requestKey, async () => {
       const sanitizedPrompt = sanitizePII(prompt);
       
@@ -430,7 +505,7 @@ async function callOpenAI<T>(
           { role: "user", content: sanitizedPrompt },
         ],
         response_format: { type: "json_object" },
-        max_completion_tokens: AI_CONFIG.maxTokens,
+        max_completion_tokens: tokenBudget,
         temperature: AI_CONFIG.temperature,
       });
 
@@ -445,10 +520,12 @@ async function callOpenAI<T>(
 
     const latencyMs = Date.now() - startTime;
     trackLatency(latencyMs);
+    trackFeatureAccess(feature, false, latencyMs);
     return { result, latencyMs };
   } catch (error) {
     const latencyMs = Date.now() - startTime;
     trackLatency(latencyMs);
+    trackRequest(true);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error(`[AI Error] ${feature}: ${errorMessage}`);
     return { result: null, latencyMs, error: errorMessage };
