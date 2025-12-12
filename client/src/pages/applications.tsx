@@ -13,7 +13,11 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Download,
+  Trash2,
+  CheckCircle,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -84,6 +88,7 @@ export default function Applications() {
   const [page, setPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const { data: applications, isLoading } = useQuery<AdmissionApplication[]>({
     queryKey: ["/api/admission/applications"],
@@ -160,6 +165,69 @@ export default function Applications() {
     setFilters((prev) => ({ ...prev, [key]: "" }));
     setPage(1);
   };
+
+  const currentPageIds = useMemo(() => new Set(paginatedApplications.map(app => app.id)), [paginatedApplications]);
+  const currentPageSelected = useMemo(() => 
+    paginatedApplications.filter(app => selectedIds.has(app.id)).length,
+    [paginatedApplications, selectedIds]
+  );
+  const isAllCurrentPageSelected = currentPageSelected === paginatedApplications.length && paginatedApplications.length > 0;
+  const isSomeCurrentPageSelected = currentPageSelected > 0 && currentPageSelected < paginatedApplications.length;
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (isAllCurrentPageSelected) {
+        currentPageIds.forEach(id => next.delete(id));
+      } else {
+        currentPageIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  }, [currentPageIds, isAllCurrentPageSelected]);
+
+  const toggleSelectOne = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const exportToCSV = useCallback(() => {
+    const dataToExport = selectedIds.size > 0 
+      ? filteredApplications.filter(app => selectedIds.has(app.id))
+      : filteredApplications;
+
+    const headers = ["Application No", "First Name", "Last Name", "Grade", "Status", "Applied Date", "Father Email", "Father Phone"];
+    const rows = dataToExport.map(app => [
+      app.applicationNumber || "",
+      app.studentFirstName || "",
+      app.studentLastName || "",
+      gradeOptions.find(g => g.id === app.gradeAppliedFor)?.name || app.gradeAppliedFor || "",
+      statusLabels[app.status as ApplicationStatus] || app.status || "",
+      app.applicationDate ? format(new Date(app.applicationDate), "yyyy-MM-dd") : "",
+      app.fatherEmail || "",
+      app.fatherPhone || "",
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `applications_${format(new Date(), "yyyy-MM-dd")}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [filteredApplications, selectedIds]);
 
   if (isLoading) {
     return (
@@ -335,6 +403,16 @@ export default function Applications() {
               </div>
             </SheetContent>
           </Sheet>
+
+          <Button variant="outline" className="gap-2" onClick={exportToCSV} data-testid="button-export">
+            <Download className="h-4 w-4" />
+            Export
+            {selectedIds.size > 0 && (
+              <Badge variant="secondary" className="ml-1">
+                {selectedIds.size}
+              </Badge>
+            )}
+          </Button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -408,6 +486,21 @@ export default function Applications() {
         </div>
       )}
 
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg border">
+          <span className="text-sm font-medium">
+            {selectedIds.size} selected
+          </span>
+          <Button variant="outline" size="sm" onClick={exportToCSV} data-testid="button-bulk-export">
+            <Download className="h-4 w-4 mr-2" />
+            Export Selected
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())} data-testid="button-clear-selection">
+            Clear Selection
+          </Button>
+        </div>
+      )}
+
       {paginatedApplications.length > 0 ? (
         <>
           <Card className="border-card-border">
@@ -415,6 +508,13 @@ export default function Applications() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={isAllCurrentPageSelected ? true : isSomeCurrentPageSelected ? "indeterminate" : false}
+                        onCheckedChange={toggleSelectAll}
+                        data-testid="checkbox-select-all"
+                      />
+                    </TableHead>
                     <TableHead>Application No.</TableHead>
                     <TableHead>Student Name</TableHead>
                     <TableHead>Grade</TableHead>
@@ -426,6 +526,13 @@ export default function Applications() {
                 <TableBody>
                   {paginatedApplications.map((app) => (
                     <TableRow key={app.id} data-testid={`application-row-${app.id}`}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(app.id)}
+                          onCheckedChange={() => toggleSelectOne(app.id)}
+                          data-testid={`checkbox-${app.id}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-mono text-sm">{app.applicationNumber}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-3">
