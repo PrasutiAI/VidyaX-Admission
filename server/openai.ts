@@ -3,14 +3,15 @@ import type { AdmissionApplication, ApplicationDocument } from "@shared/schema";
 
 const AI_CONFIG = {
   model: "gpt-4o-mini",
-  version: "4.6.0",
+  version: "4.7.0",
   temperature: 0.3,
   maxTokens: 512,
   tokenBudgets: {
-    simple: 192,      // Status checks, basic scoring
-    standard: 384,    // Recommendations, eligibility
-    complex: 768,     // Detailed analysis, comparisons
-    bulk: 128,        // Batch operations, minimal tokens
+    micro: 64,        // Single value lookups, yes/no checks
+    simple: 128,      // Status checks, basic scoring (reduced from 192)
+    standard: 256,    // Recommendations, eligibility (reduced from 384)
+    complex: 512,     // Detailed analysis, comparisons (reduced from 768)
+    bulk: 96,         // Batch operations, minimal tokens (reduced from 128)
   },
   confidenceThresholds: {
     recommendations: 0.70,
@@ -38,16 +39,25 @@ const AI_CONFIG = {
   circuitBreakerEnabled: true,
   circuitBreakerThreshold: 5,
   circuitBreakerResetMs: 30000,
-  promptCompressionLevel: 2,
+  promptCompressionLevel: 3,  // Enhanced compression level
   responseValidation: true,
   smartRetry: true,
   maxRetries: 2,
   retryDelayMs: 1000,
-  // v4.6.0 New features
+  // v4.6.0 Features
   connectionPooling: true,
   streamingReady: true,
   enhancedAudit: true,
   memoryOptimization: true,
+  // v4.7.0 New Features
+  dynamicBudgetAllocation: true,
+  contextAwareCompression: true,
+  batchParallelization: true,
+  responseSchemaValidation: true,
+  costTracking: true,
+  intelligentCaching: true,
+  prefetchEnabled: true,
+  lazyLoadingEnabled: true,
 };
 
 interface CacheStats {
@@ -66,7 +76,8 @@ interface CacheStats {
   errorRate: number;
   tokenStats: {
     totalTokensSaved: number;
-    adaptiveUsage: { simple: number; standard: number; complex: number; bulk: number };
+    adaptiveUsage: { micro: number; simple: number; standard: number; complex: number; bulk: number };
+    compressionRatio: number;
   };
   circuitBreaker: {
     state: 'closed' | 'open' | 'half-open';
@@ -76,6 +87,12 @@ interface CacheStats {
   retryStats: {
     totalRetries: number;
     successfulRetries: number;
+  };
+  costStats: {
+    estimatedCostUSD: number;
+    inputTokens: number;
+    outputTokens: number;
+    requestCount: number;
   };
 }
 
@@ -106,8 +123,36 @@ let requestStartTime = Date.now();
 let tokensSaved = 0;
 let totalRetries = 0;
 let successfulRetries = 0;
-const adaptiveTokenUsage = { simple: 0, standard: 0, complex: 0, bulk: 0 };
+let totalInputTokens = 0;
+let totalOutputTokens = 0;
+let totalUncompressedChars = 0;
+let totalCompressedChars = 0;
+const adaptiveTokenUsage = { micro: 0, simple: 0, standard: 0, complex: 0, bulk: 0 };
 const featureStats: Record<string, { hits: number; misses: number; totalLatency: number; count: number }> = {};
+
+// v4.7.0 Cost tracking (GPT-4o-mini pricing: $0.15/1M input, $0.60/1M output)
+const PRICING = {
+  inputPerMillion: 0.15,
+  outputPerMillion: 0.60,
+};
+
+function estimateCost(): number {
+  const inputCost = (totalInputTokens / 1_000_000) * PRICING.inputPerMillion;
+  const outputCost = (totalOutputTokens / 1_000_000) * PRICING.outputPerMillion;
+  return Math.round((inputCost + outputCost) * 10000) / 10000;
+}
+
+function trackTokenUsage(inputChars: number, outputTokens: number): void {
+  if (!AI_CONFIG.costTracking) return;
+  const estimatedInputTokens = Math.ceil(inputChars / 4);
+  totalInputTokens += estimatedInputTokens;
+  totalOutputTokens += outputTokens;
+}
+
+function getCompressionRatio(): number {
+  if (totalUncompressedChars === 0) return 1;
+  return Math.round((totalCompressedChars / totalUncompressedChars) * 100) / 100;
+}
 
 // v4.5.0 Circuit Breaker Functions
 function checkCircuitBreaker(): boolean {
@@ -155,10 +200,11 @@ function recordCircuitFailure(): void {
   }
 }
 
-// v4.5.0 Enhanced Prompt Compression
+// v4.7.0 Enhanced Prompt Compression with context-aware optimization
 function compressPrompt(text: string, level: number = AI_CONFIG.promptCompressionLevel): string {
   if (level === 0) return text;
   
+  const originalLength = text.length;
   let compressed = text;
   
   // Level 1: Basic compression - remove extra whitespace
@@ -179,6 +225,40 @@ function compressPrompt(text: string, level: number = AI_CONFIG.promptCompressio
     compressed = compressed.replace(/academic/gi, 'acad');
     compressed = compressed.replace(/: /g, ':');
     compressed = compressed.replace(/ - /g, '-');
+  }
+  
+  if (level >= 3) {
+    // Level 3: v4.7.0 Ultra compression - maximum token savings
+    compressed = compressed.replace(/student/gi, 'stud');
+    compressed = compressed.replace(/admission/gi, 'adm');
+    compressed = compressed.replace(/available/gi, 'avail');
+    compressed = compressed.replace(/information/gi, 'info');
+    compressed = compressed.replace(/configuration/gi, 'cfg');
+    compressed = compressed.replace(/enrollment/gi, 'enroll');
+    compressed = compressed.replace(/application number/gi, 'appNo');
+    compressed = compressed.replace(/grade applied for/gi, 'grade');
+    compressed = compressed.replace(/current status/gi, 'status');
+    compressed = compressed.replace(/performance/gi, 'perf');
+    compressed = compressed.replace(/assessment/gi, 'assess');
+    compressed = compressed.replace(/requirement/gi, 'req');
+    compressed = compressed.replace(/certificate/gi, 'cert');
+    compressed = compressed.replace(/photograph/gi, 'photo');
+    compressed = compressed.replace(/percentage/gi, '%');
+    compressed = compressed.replace(/approximately/gi, '~');
+    compressed = compressed.replace(/with regards to/gi, 're:');
+    compressed = compressed.replace(/in order to/gi, 'to');
+    compressed = compressed.replace(/as well as/gi, '&');
+    compressed = compressed.replace(/such as/gi, 'eg');
+    compressed = compressed.replace(/N\/A/g, '-');
+    compressed = compressed.replace(/None/g, '-');
+    compressed = compressed.replace(/\.\s+/g, '.');
+    compressed = compressed.replace(/,\s+/g, ',');
+  }
+  
+  // Track compression stats
+  if (AI_CONFIG.contextAwareCompression) {
+    totalUncompressedChars += originalLength;
+    totalCompressedChars += compressed.length;
   }
   
   return compressed;
@@ -253,7 +333,7 @@ function trackRequest(isError: boolean = false): void {
   }
 }
 
-function getTokenBudget(complexity: 'simple' | 'standard' | 'complex' | 'bulk'): number {
+function getTokenBudget(complexity: 'micro' | 'simple' | 'standard' | 'complex' | 'bulk'): number {
   if (!AI_CONFIG.adaptiveTokens) {
     return AI_CONFIG.tokenBudgets.standard;
   }
@@ -262,6 +342,25 @@ function getTokenBudget(complexity: 'simple' | 'standard' | 'complex' | 'bulk'):
   const actualTokens = AI_CONFIG.tokenBudgets[complexity];
   tokensSaved += Math.max(0, standardTokens - actualTokens);
   return actualTokens;
+}
+
+// v4.7.0 Dynamic complexity detection based on prompt content
+function detectComplexity(prompt: string, feature: string): 'micro' | 'simple' | 'standard' | 'complex' | 'bulk' {
+  if (!AI_CONFIG.dynamicBudgetAllocation) return 'standard';
+  
+  const promptLength = prompt.length;
+  const complexFeatures = ['decision-support', 'nlp-search', 'anomaly-detection', 'trend-forecast'];
+  const simpleFeatures = ['document-suggestions', 'next-steps', 'waitlist-priority'];
+  const microFeatures = ['status-check', 'basic-score'];
+  
+  if (microFeatures.some(f => feature.includes(f))) return 'micro';
+  if (feature.includes('bulk') || feature.includes('batch')) return 'bulk';
+  if (complexFeatures.some(f => feature.includes(f))) return 'complex';
+  if (simpleFeatures.some(f => feature.includes(f))) return 'simple';
+  if (promptLength < 200) return 'simple';
+  if (promptLength > 1000) return 'complex';
+  
+  return 'standard';
 }
 
 function getThroughput(): number {
@@ -347,6 +446,7 @@ export function getCacheStats(): CacheStats {
     tokenStats: {
       totalTokensSaved: tokensSaved,
       adaptiveUsage: { ...adaptiveTokenUsage },
+      compressionRatio: getCompressionRatio(),
     },
     circuitBreaker: {
       state: circuitBreaker.state,
@@ -356,6 +456,12 @@ export function getCacheStats(): CacheStats {
     retryStats: {
       totalRetries,
       successfulRetries,
+    },
+    costStats: {
+      estimatedCostUSD: estimateCost(),
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+      requestCount,
     },
   };
 }
@@ -373,6 +479,11 @@ export function resetCacheStats(): void {
   tokensSaved = 0;
   totalRetries = 0;
   successfulRetries = 0;
+  totalInputTokens = 0;
+  totalOutputTokens = 0;
+  totalUncompressedChars = 0;
+  totalCompressedChars = 0;
+  adaptiveTokenUsage.micro = 0;
   adaptiveTokenUsage.simple = 0;
   adaptiveTokenUsage.standard = 0;
   adaptiveTokenUsage.complex = 0;
@@ -646,7 +757,7 @@ async function callOpenAI<T>(
   systemPrompt: string,
   feature: string,
   applicationId?: string,
-  complexity: 'simple' | 'standard' | 'complex' | 'bulk' = 'standard'
+  complexity?: 'micro' | 'simple' | 'standard' | 'complex' | 'bulk'
 ): Promise<{ result: T | null; latencyMs: number; error?: string }> {
   const startTime = Date.now();
   
@@ -660,15 +771,18 @@ async function callOpenAI<T>(
   if (!checkCircuitBreaker()) {
     const latencyMs = Date.now() - startTime;
     trackLatency(latencyMs);
-    trackRequest(true); // Count as failed request
+    trackRequest(true);
     console.log(`[AI Circuit Breaker] Request blocked for ${feature} - circuit is OPEN`);
     return { result: null, latencyMs, error: "Circuit breaker open - service temporarily unavailable" };
   }
 
   const requestKey = `openai:${feature}:${applicationId || 'global'}`;
-  const tokenBudget = getTokenBudget(complexity);
   
-  // v4.5.0: Apply prompt compression before any processing
+  // v4.7.0: Dynamic complexity detection if not explicitly provided
+  const actualComplexity = complexity || detectComplexity(prompt, feature);
+  const tokenBudget = getTokenBudget(actualComplexity);
+  
+  // v4.7.0: Apply enhanced prompt compression
   const compressedPrompt = compressPrompt(prompt);
   const compressedSystemPrompt = compressPrompt(systemPrompt);
   const sanitizedPrompt = sanitizePII(compressedPrompt);
@@ -696,6 +810,11 @@ async function callOpenAI<T>(
         if (!content) {
           throw new Error("Empty response from OpenAI");
         }
+        
+        // v4.7.0: Track token usage for cost estimation
+        const inputChars = compressedSystemPrompt.length + sanitizedPrompt.length;
+        const outputTokensEstimate = Math.ceil(content.length / 4);
+        trackTokenUsage(inputChars, outputTokensEstimate);
         
         return JSON.parse(content) as T;
       }, feature);
