@@ -198,6 +198,11 @@ export default function ApplicationDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admission/applications", params.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/eligibility-score", params.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/document-suggestions", params.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/recommendations", params.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/next-steps", params.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ai/predictive-outcome", params.id] });
       setIsDocVerifyDialogOpen(false);
       setSelectedDocument(null);
       setDocVerifyRemarks("");
@@ -507,67 +512,93 @@ export default function ApplicationDetail() {
                   </div>
                   {application.documents && application.documents.length > 0 ? (
                     <div className="space-y-3">
-                      {application.documents.map((doc) => (
-                        <div 
-                          key={doc.id}
-                          className="flex items-center justify-between p-4 rounded-lg border"
-                          data-testid={`document-row-${doc.id}`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                              <FileText className="h-5 w-5 text-muted-foreground" />
+                      {application.documents.map((doc) => {
+                        const handleDownload = () => {
+                          const link = document.createElement('a');
+                          link.href = doc.fileUrl;
+                          const downloadName = `${application.applicationNumber}_${doc.fileName}`;
+                          link.download = downloadName;
+                          link.rel = 'noopener noreferrer';
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        };
+                        
+                        const handleView = () => {
+                          window.open(doc.fileUrl, '_blank', 'noopener,noreferrer');
+                        };
+                        
+                        return (
+                          <div 
+                            key={doc.id}
+                            className="flex items-center justify-between p-4 rounded-lg border"
+                            data-testid={`document-row-${doc.id}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+                                <FileText className="h-5 w-5 text-muted-foreground" />
+                              </div>
+                              <div>
+                                <p className="font-medium">{doc.fileName}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {documentTypeLabels[doc.documentType]} • {format(new Date(doc.uploadedAt!), "MMM d, yyyy")}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-medium">{doc.fileName}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {documentTypeLabels[doc.documentType]} • {format(new Date(doc.uploadedAt!), "MMM d, yyyy")}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => window.open(doc.fileUrl, "_blank")}
-                              data-testid={`button-view-doc-${doc.id}`}
-                            >
-                              <Eye className="h-4 w-4 mr-1" />
-                              View
-                            </Button>
-                            {doc.verificationStatus === "pending" ? (
-                              <>
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  onClick={() => openDocVerifyDialog(doc, "verified")}
-                                  data-testid={`button-verify-doc-${doc.id}`}
-                                  className="text-emerald-600 hover:text-emerald-700"
-                                >
-                                  <CheckCircle2 className="h-4 w-4 mr-1" />
-                                  Verify
-                                </Button>
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  onClick={() => openDocVerifyDialog(doc, "rejected")}
-                                  data-testid={`button-reject-doc-${doc.id}`}
-                                  className="text-red-600 hover:text-red-700"
-                                >
-                                  <X className="h-4 w-4 mr-1" />
-                                  Reject
-                                </Button>
-                              </>
-                            ) : (
-                              <Badge 
-                                variant="outline"
-                                className={`${documentVerificationColors[doc.verificationStatus].bg} ${documentVerificationColors[doc.verificationStatus].text} border-0`}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={handleView}
+                                data-testid={`button-view-doc-${doc.id}`}
                               >
-                                {doc.verificationStatus.charAt(0).toUpperCase() + doc.verificationStatus.slice(1)}
-                              </Badge>
-                            )}
+                                <Eye className="h-4 w-4 mr-1" />
+                                View
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={handleDownload}
+                                data-testid={`button-download-doc-${doc.id}`}
+                              >
+                                <Download className="h-4 w-4 mr-1" />
+                                Download
+                              </Button>
+                              {doc.verificationStatus === "pending" ? (
+                                <>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={() => openDocVerifyDialog(doc, "verified")}
+                                    data-testid={`button-verify-doc-${doc.id}`}
+                                    className="text-emerald-600"
+                                  >
+                                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                                    Verify
+                                  </Button>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={() => openDocVerifyDialog(doc, "rejected")}
+                                    data-testid={`button-reject-doc-${doc.id}`}
+                                    className="text-red-600"
+                                  >
+                                    <X className="h-4 w-4 mr-1" />
+                                    Reject
+                                  </Button>
+                                </>
+                              ) : (
+                                <Badge 
+                                  variant="outline"
+                                  className={`${documentVerificationColors[doc.verificationStatus].bg} ${documentVerificationColors[doc.verificationStatus].text} border-0`}
+                                >
+                                  {doc.verificationStatus.charAt(0).toUpperCase() + doc.verificationStatus.slice(1)}
+                                </Badge>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <EmptyState
