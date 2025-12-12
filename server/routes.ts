@@ -973,23 +973,43 @@ export async function registerRoutes(
     }
   });
 
-  // AI Dashboard Insights
+  // AI Dashboard Insights (cached with data-versioned key)
   app.get("/api/ai/dashboard-insights", async (req, res) => {
     try {
-      const applications = await storage.getApplications();
-      const stats = await storage.getDashboardStats();
+      const [applications, stats] = await Promise.all([
+        storage.getApplications(),
+        storage.getDashboardStats()
+      ]);
+      
+      const dataVersion = `${stats.totalApplications}-${stats.enrolled}-${applications.length}`;
+      const cacheKey = `ai:dashboard-insights:${dataVersion}`;
+      const cached = getCachedResponse(cacheKey);
+      if (cached) return res.json(cached);
+      
       const insights = generateDashboardInsights(applications, stats);
+      
+      setCachedResponse(cacheKey, insights, CACHE_TTL_SHORT);
       res.json(insights);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  // AI Bulk Recommendations
+  // AI Bulk Recommendations (optimized with batch loading and data-versioned cache)
   app.get("/api/ai/bulk-recommendations", async (req, res) => {
     try {
-      const applications = await storage.getApplications();
-      const recommendations = generateBulkRecommendations(applications);
+      const appsWithDocs = await storage.getApplicationsWithDocuments();
+      
+      const dataVersion = appsWithDocs.length > 0 
+        ? `${appsWithDocs.length}-${appsWithDocs[0].application.updatedAt?.getTime() || 0}`
+        : '0';
+      const cacheKey = `ai:bulk-recommendations:${dataVersion}`;
+      const cached = getCachedResponse(cacheKey);
+      if (cached) return res.json(cached);
+      
+      const recommendations = generateBulkRecommendations(appsWithDocs.map(a => a.application));
+      
+      setCachedResponse(cacheKey, recommendations, CACHE_TTL_MEDIUM);
       res.json(recommendations);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1066,11 +1086,19 @@ export async function registerRoutes(
     }
   });
 
-  // AI Grade-wise Analytics
+  // AI Grade-wise Analytics (cached with data-versioned key)
   app.get("/api/ai/grade-analytics", async (req, res) => {
     try {
       const applications = await storage.getApplications();
+      
+      const dataVersion = applications.length;
+      const cacheKey = `ai:grade-analytics:${dataVersion}`;
+      const cached = getCachedResponse(cacheKey);
+      if (cached) return res.json(cached);
+      
       const analytics = generateGradeAnalytics(applications);
+      
+      setCachedResponse(cacheKey, analytics, CACHE_TTL_MEDIUM);
       res.json(analytics);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1235,11 +1263,19 @@ export async function registerRoutes(
     }
   });
 
-  // AI Workflow Optimization (v2.7.0)
+  // AI Workflow Optimization (v2.7.0, cached with data-versioned key)
   app.get("/api/ai/workflow-optimization", async (req, res) => {
     try {
       const applications = await storage.getApplications();
+      
+      const dataVersion = applications.length;
+      const cacheKey = `ai:workflow-optimization:${dataVersion}`;
+      const cached = getCachedResponse(cacheKey);
+      if (cached) return res.json(cached);
+      
       const optimization = generateWorkflowOptimization(applications);
+      
+      setCachedResponse(cacheKey, optimization, CACHE_TTL_MEDIUM);
       res.json(optimization);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1268,11 +1304,19 @@ export async function registerRoutes(
     }
   });
 
-  // AI Conversion Funnel (v2.7.0)
+  // AI Conversion Funnel (v2.7.0, cached with data-versioned key)
   app.get("/api/ai/conversion-funnel", async (req, res) => {
     try {
       const applications = await storage.getApplications();
+      
+      const dataVersion = applications.length;
+      const cacheKey = `ai:conversion-funnel:${dataVersion}`;
+      const cached = getCachedResponse(cacheKey);
+      if (cached) return res.json(cached);
+      
       const funnel = generateConversionFunnel(applications);
+      
+      setCachedResponse(cacheKey, funnel, CACHE_TTL_MEDIUM);
       res.json(funnel);
     } catch (error: any) {
       res.status(500).json({ message: error.message });

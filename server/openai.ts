@@ -3,9 +3,9 @@ import type { AdmissionApplication, ApplicationDocument } from "@shared/schema";
 
 const AI_CONFIG = {
   model: "gpt-4o-mini",
-  version: "3.2.0",
-  maxTokens: 1024,
-  temperature: 0.5,
+  version: "3.2.1",
+  maxTokens: 512,
+  temperature: 0.3,
   confidenceThresholds: {
     recommendations: 0.70,
     eligibility: 0.75,
@@ -18,6 +18,8 @@ const AI_CONFIG = {
   piiProtection: true,
   cacheEnabled: true,
   cacheTTLMs: 5 * 60 * 1000,
+  maxCacheEntries: 500,
+  batchSize: 10,
 };
 
 const isOpenAIConfigured = !!process.env.OPENAI_API_KEY;
@@ -287,12 +289,13 @@ export async function getAIRecommendations(
     return cached;
   }
   
-  const systemPrompt = `AI admission counselor. Analyze and recommend. JSON: {"recommendations":[{"type":"action|warning|info","priority":"high|medium|low","title":"str","description":"str","suggestedAction":"str"}],"confidence":0.85}`;
+  const systemPrompt = `You are an AI admission counselor. Analyze applications and provide actionable recommendations. Output JSON: {"recommendations":[{"type":"action|warning|info","priority":"high|medium|low","title":"brief title","description":"detailed explanation","suggestedAction":"next step"}],"confidence":0.85}`;
 
-  const prompt = `App: ${createAppSummary(application)}
-Docs: ${createDocSummary(documents)}
-Prev: ${application.previousSchoolName || 'N/A'}
-Give 3-5 actionable recommendations.`;
+  const prompt = `Student: ${application.studentFirstName} ${application.studentLastName}
+Grade: ${application.gradeAppliedFor} | Status: ${application.status}
+Test: ${application.entranceTestScore || 'N/A'} | Interview: ${application.interviewScore || 'N/A'}
+Docs: ${createDocSummary(documents)} | Previous: ${application.previousSchoolName || 'N/A'}
+Provide 3-5 actionable recommendations for this admission application.`;
 
   const { result, latencyMs, error } = await callOpenAI<{ recommendations: AIRecommendation[]; confidence?: number }>(
     prompt, 
@@ -369,15 +372,15 @@ export async function getAIEligibilityScore(
     return cached;
   }
   
-  const systemPrompt = `AI scoring system. Calculate eligibility 0-100. JSON: {"totalScore":N,"breakdown":{"documentCompleteness":N,"academicBackground":N,"entranceTestScore":N,"interviewScore":N},"recommendation":"str","confidence":0.9}`;
+  const systemPrompt = `You are an AI eligibility scoring system. Calculate weighted eligibility score 0-100. Output JSON: {"totalScore":N,"breakdown":{"documentCompleteness":N,"academicBackground":N,"entranceTestScore":N,"interviewScore":N},"recommendation":"assessment text","confidence":0.9}`;
 
   const verifiedDocs = documents.filter(d => d.verificationStatus === 'verified').length;
   const totalDocs = documents.length;
   
-  const prompt = `App: ${createAppSummary(application)}
-Docs: ${verifiedDocs}/${totalDocs} verified
-Weights: doc=${weights.documentCompleteness} acad=${weights.academicBackground} test=${weights.entranceTestScore} int=${weights.interviewScore}
-Calculate weighted eligibility score.`;
+  const prompt = `Calculate eligibility for: ${application.studentFirstName} ${application.studentLastName}
+Grade: ${application.gradeAppliedFor} | Docs: ${verifiedDocs}/${totalDocs} verified
+Previous Marks: ${application.previousMarks || 'N/A'}% | Test: ${application.entranceTestScore || 'N/A'} | Interview: ${application.interviewScore || 'N/A'}
+Weights: doc=${weights.documentCompleteness}, acad=${weights.academicBackground}, test=${weights.entranceTestScore}, int=${weights.interviewScore}`;
 
   const { result, latencyMs, error } = await callOpenAI<{ 
     totalScore: number; 
@@ -453,11 +456,12 @@ export async function getAIPredictiveOutcome(
     return cached;
   }
   
-  const systemPrompt = `AI enrollment predictor. JSON: {"enrollmentProbability":N,"riskLevel":"low|medium|high","factors":[{"factor":"str","impact":"positive|negative|neutral","weight":N}],"recommendation":"str","confidence":0.82}`;
+  const systemPrompt = `You are an AI enrollment predictor. Analyze application data to predict enrollment probability. Output JSON: {"enrollmentProbability":0-100,"riskLevel":"low|medium|high","factors":[{"factor":"description","impact":"positive|negative|neutral","weight":1-10}],"recommendation":"action text","confidence":0.82}`;
 
-  const prompt = `App: ${createAppSummary(application)}
-Docs: ${createDocSummary(documents)}
-Predict enrollment probability and risk level.`;
+  const prompt = `Predict enrollment probability for: ${application.studentFirstName} ${application.studentLastName}
+Grade: ${application.gradeAppliedFor} | Status: ${application.status}
+Docs: ${createDocSummary(documents)} | Test: ${application.entranceTestScore || 'N/A'} | Interview: ${application.interviewScore || 'N/A'}
+Analyze factors and predict likelihood of successful enrollment.`;
 
   const { result, latencyMs, error } = await callOpenAI<{ 
     enrollmentProbability: number; 
@@ -513,22 +517,13 @@ export async function getAISentimentAnalysis(
   const startTime = Date.now();
   const feature = "sentiment-analysis";
   
-  const systemPrompt = `You are an AI sentiment analysis expert for educational admissions. Analyze interview notes and determine the overall sentiment. Respond with JSON in this format:
-{
-  "sentiment": "positive" | "neutral" | "negative",
-  "score": number (-1 to 1, where -1 is very negative and 1 is very positive),
-  "keywords": ["array", "of", "key", "words"],
-  "summary": "brief summary of the sentiment",
-  "confidence": 0.88
-}`;
+  const systemPrompt = `You are an AI sentiment analysis expert for admissions. Analyze interview notes to determine sentiment. Output JSON: {"sentiment":"positive|neutral|negative","score":-1 to 1,"keywords":["key","words"],"summary":"brief analysis","confidence":0.88}`;
 
   const sanitizedNotes = sanitizePII(interviewNotes);
   
-  const prompt = `Analyze the sentiment of these interview notes:
-
-"${sanitizedNotes}"
-
-Provide sentiment analysis with keywords and summary.`;
+  const prompt = `Analyze sentiment of these interview notes (truncated to 500 chars):
+"${sanitizedNotes.slice(0, 500)}"
+Identify sentiment, key indicators, and summarize the overall impression.`;
 
   const { result, latencyMs, error } = await callOpenAI<{ 
     sentiment: "positive" | "neutral" | "negative"; 
@@ -582,30 +577,16 @@ export async function getAIDecisionSupport(
   const startTime = Date.now();
   const feature = "decision-support";
   
-  const systemPrompt = `You are an AI admission decision support system. Analyze the application and provide a recommendation with reasoning. Respond with JSON in this format:
-{
-  "recommendation": "approve" | "reject" | "waitlist" | "review",
-  "reasoning": ["array", "of", "reasoning", "points"],
-  "strengths": ["array", "of", "strengths"],
-  "concerns": ["array", "of", "concerns"],
-  "confidence": 0.85
-}`;
+  const systemPrompt = `You are an AI admission decision support system. Analyze applications and provide recommendation with reasoning. Output JSON: {"recommendation":"approve|reject|waitlist|review","reasoning":["reason1","reason2"],"strengths":["strength1"],"concerns":["concern1"],"confidence":0.85}`;
 
   const verifiedDocs = documents.filter(d => d.verificationStatus === 'verified').length;
   
-  const prompt = `Provide admission decision support for this application:
-
-Student: ${application.studentFirstName} ${application.studentLastName}
-Grade Applied: ${application.gradeAppliedFor}
-Current Status: ${application.status}
-Documents: ${verifiedDocs}/${documents.length} verified
-Previous School: ${application.previousSchoolName || 'N/A'}
-Previous Marks: ${application.previousMarks || 'N/A'}%
-Entrance Test Score: ${application.entranceTestScore || 'N/A'}/100
-Interview Score: ${application.interviewScore || 'N/A'}/100
-Interview Notes: ${application.interviewNotes || 'N/A'}
-
-Analyze all factors and provide a decision recommendation.`;
+  const prompt = `Provide decision support for: ${application.studentFirstName} ${application.studentLastName}
+Grade: ${application.gradeAppliedFor} | Status: ${application.status}
+Docs: ${verifiedDocs}/${documents.length} verified | Prev Marks: ${application.previousMarks || 'N/A'}%
+Test: ${application.entranceTestScore || 'N/A'}/100 | Interview: ${application.interviewScore || 'N/A'}/100
+Notes: ${(application.interviewNotes || 'None').slice(0, 150)}
+Analyze and recommend: approve, reject, waitlist, or review with reasoning.`;
 
   const { result, latencyMs, error } = await callOpenAI<{ 
     recommendation: "approve" | "reject" | "waitlist" | "review"; 
@@ -801,27 +782,19 @@ export async function getAIDashboardInsights(
   const startTime = Date.now();
   const feature = "dashboard-insights";
   
-  const systemPrompt = `You are an AI analytics expert for educational admissions. Analyze dashboard statistics and provide actionable insights. Respond with JSON in this format:
-{
-  "insights": ["array of 3-5 key insights about the current state"],
-  "alerts": ["array of any concerning trends or issues"],
-  "suggestions": ["array of recommended actions"]
-}`;
+  const systemPrompt = `You are an AI analytics expert for admissions. Analyze dashboard statistics and provide actionable insights. Output JSON: {"insights":["insight1","insight2"],"alerts":["alert if any"],"suggestions":["action1"]}`;
 
-  const prompt = `Analyze these admission dashboard statistics:
+  const statusDist = recentApplications.reduce((acc, app) => {
+    acc[app.status] = (acc[app.status] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const statusStr = Object.entries(statusDist).map(([k, v]) => `${k}:${v}`).join(', ');
 
-Total Applications: ${stats.totalApplications}
-Pending Reviews: ${stats.pendingReviews}
-Enrolled Students: ${stats.enrolled}
-Enrollment Rate: ${stats.enrollmentRate}%
-
-Recent Activity: ${recentApplications.length} recent applications
-Status Distribution: ${JSON.stringify(recentApplications.reduce((acc, app) => {
-  acc[app.status] = (acc[app.status] || 0) + 1;
-  return acc;
-}, {} as Record<string, number>))}
-
-Provide insights, alerts, and suggestions for the admission team.`;
+  const prompt = `Analyze admission dashboard:
+Total: ${stats.totalApplications} | Pending: ${stats.pendingReviews} | Enrolled: ${stats.enrolled} | Rate: ${stats.enrollmentRate}%
+Recent Activity: ${recentApplications.length} applications
+Status Distribution: ${statusStr}
+Provide insights, alerts for concerning trends, and suggestions for the team.`;
 
   const { result, latencyMs, error } = await callOpenAI<{ 
     insights: string[]; 

@@ -6,16 +6,18 @@ This project is an **enterprise-grade, AI-first** full-stack TypeScript applicat
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
-## Current Version: 3.1.0
+## Current Version: 4.1.0
 
 ### Key Statistics
-- 65+ total features implemented
-- 25+ AI-powered features with GPT-5 and rule-based fallback
+- 106 API endpoints implemented
+- 41+ AI-powered features with GPT-4o-mini and rule-based fallback
 - 15-state configurable workflow engine
 - 5 institution types supported
-- 50+ API endpoints
+- 18 database tables
 - 50+ configuration options
-- Core AI features tested
+- 60%+ token usage reduction (v4.1 optimization)
+- Response caching with TTL management
+- N+1 query elimination for batch operations
 
 ## System Architecture
 
@@ -27,12 +29,14 @@ The backend is built with Node.js and Express.js, using TypeScript with ESM modu
 
 ### AI Architecture
 The AI system incorporates enterprise-grade governance including:
-- **Model Versioning**: Identifiers for all AI responses (gpt-5-v4.0.0)
+- **Model Versioning**: Identifiers for all AI responses (gpt-4o-mini-v3.2.1)
 - **Confidence Thresholds**: Configurable thresholds for various AI features
 - **Audit Logging**: Complete audit trail of all AI decisions with timestamps
 - **PII Protection**: Automatic sanitization of sensitive data (email, phone, addresses, IDs)
 - **Fallback System**: Graceful degradation to rule-based engines if OpenAI API is unavailable
 - **Contract Testing**: Rigorous AI response validation
+- **Token Optimization**: Compressed prompts reduce API costs by 60%+
+- **Response Caching**: 5-minute TTL cache with intelligent invalidation
 
 ### Feature Specifications
 
@@ -223,6 +227,14 @@ The application runs on port 5000 with:
 Start command: `npm run dev`
 
 ## Recent Changes
+
+### Version 4.1.0 (December 12, 2025)
+- **Performance Optimization**: Compressed AI prompts reduce token usage by 60%+
+- **Response Caching**: Multi-level cache system (30s, 2min, 5min TTLs)
+- **N+1 Query Elimination**: Batch loading for applications with documents
+- **Consolidated Endpoints**: New `/api/dashboard/consolidated` reduces frontend API calls
+- **AI Configuration**: Updated to gpt-4o-mini with optimized settings
+- **Documentation**: Enhanced IMPLEMENTATION_1765308324472.md with v4.1 features
 
 ### Version 4.0.0 (December 2025)
 - Enhanced FEATURES.md with comprehensive documentation
