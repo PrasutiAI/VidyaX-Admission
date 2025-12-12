@@ -2,10 +2,10 @@ import OpenAI from "openai";
 import type { AdmissionApplication, ApplicationDocument } from "@shared/schema";
 
 const AI_CONFIG = {
-  model: "gpt-5",
-  version: "3.1.0",
-  maxTokens: 2048,
-  temperature: 0.7,
+  model: "gpt-4o-mini",
+  version: "3.2.0",
+  maxTokens: 1024,
+  temperature: 0.5,
   confidenceThresholds: {
     recommendations: 0.70,
     eligibility: 0.75,
@@ -16,6 +16,8 @@ const AI_CONFIG = {
   fallbackEnabled: true,
   auditEnabled: true,
   piiProtection: true,
+  cacheEnabled: true,
+  cacheTTLMs: 5 * 60 * 1000,
 };
 
 const isOpenAIConfigured = !!process.env.OPENAI_API_KEY;
@@ -23,6 +25,61 @@ const isOpenAIConfigured = !!process.env.OPENAI_API_KEY;
 const openai = isOpenAIConfigured 
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null;
+
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  expiresAt: number;
+}
+
+const aiCache = new Map<string, CacheEntry<any>>();
+
+function getCacheKey(feature: string, applicationId?: string, dataHash?: string): string {
+  return `${feature}:${applicationId || 'global'}:${dataHash || 'default'}`;
+}
+
+function getFromCache<T>(key: string): T | null {
+  if (!AI_CONFIG.cacheEnabled) return null;
+  const entry = aiCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    aiCache.delete(key);
+    return null;
+  }
+  return entry.data as T;
+}
+
+function setCache<T>(key: string, data: T): void {
+  if (!AI_CONFIG.cacheEnabled) return;
+  const now = Date.now();
+  aiCache.set(key, {
+    data,
+    timestamp: now,
+    expiresAt: now + AI_CONFIG.cacheTTLMs,
+  });
+  if (aiCache.size > 500) {
+    const keysToDelete: string[] = [];
+    for (const [k, v] of aiCache.entries()) {
+      if (Date.now() > v.expiresAt) keysToDelete.push(k);
+    }
+    keysToDelete.forEach(k => aiCache.delete(k));
+  }
+}
+
+function createAppSummary(app: AdmissionApplication): string {
+  return `${app.studentFirstName} ${app.studentLastName}|${app.gradeAppliedFor}|${app.status}|test:${app.entranceTestScore || 'N'}|int:${app.interviewScore || 'N'}|prev:${app.previousMarks || 'N'}%`;
+}
+
+function createDocSummary(docs: ApplicationDocument[]): string {
+  const v = docs.filter(d => d.verificationStatus === 'verified').length;
+  const p = docs.filter(d => d.verificationStatus === 'pending').length;
+  return `${v}v/${p}p/${docs.length}t`;
+}
+
+function getDocUpdateHash(docs: ApplicationDocument[]): number {
+  if (!docs.length) return 0;
+  return Math.max(...docs.map(d => d.updatedAt ? new Date(d.updatedAt).getTime() : 0));
+}
 
 export interface AIRecommendation {
   type: "action" | "warning" | "info";
@@ -210,34 +267,32 @@ export async function getAIRecommendations(
   const startTime = Date.now();
   const feature = "recommendations";
   
-  const systemPrompt = `You are an AI admission counselor for an educational institution. Analyze the application and provide actionable recommendations. Respond with JSON in this format:
-{
-  "recommendations": [
-    {
-      "type": "action" | "warning" | "info",
-      "priority": "high" | "medium" | "low",
-      "title": "string",
-      "description": "string",
-      "suggestedAction": "string"
-    }
-  ],
-  "confidence": 0.85
-}`;
+  const appUpdated = application.updatedAt ? new Date(application.updatedAt).getTime() : 0;
+  const docUpdated = getDocUpdateHash(documents);
+  const dataHash = `${application.status}:${createDocSummary(documents)}:${application.entranceTestScore}:${application.interviewScore}:${appUpdated}:${docUpdated}`;
+  const cacheKey = getCacheKey(feature, application.id, dataHash);
+  const cached = getFromCache<AIRecommendation[]>(cacheKey);
+  if (cached) {
+    logAICall({
+      timestamp: new Date().toISOString(),
+      feature,
+      applicationId: application.id,
+      model: "cache",
+      inputSummary: `Application ${application.applicationNumber} (cached)`,
+      outputSummary: `${cached.length} recommendations from cache`,
+      confidence: 0.95,
+      latencyMs: Date.now() - startTime,
+      fallbackUsed: false,
+    });
+    return cached;
+  }
+  
+  const systemPrompt = `AI admission counselor. Analyze and recommend. JSON: {"recommendations":[{"type":"action|warning|info","priority":"high|medium|low","title":"str","description":"str","suggestedAction":"str"}],"confidence":0.85}`;
 
-  const prompt = `Analyze this admission application and provide recommendations:
-
-Student: ${application.studentFirstName} ${application.studentLastName}
-Grade Applied: ${application.gradeAppliedFor}
-Status: ${application.status}
-Documents Uploaded: ${documents.length}
-Documents Verified: ${documents.filter(d => d.verificationStatus === 'verified').length}
-Documents Pending: ${documents.filter(d => d.verificationStatus === 'pending').length}
-Entrance Test Score: ${application.entranceTestScore || 'Not taken'}
-Interview Score: ${application.interviewScore || 'Not conducted'}
-Previous School: ${application.previousSchoolName || 'Not provided'}
-Previous Marks: ${application.previousMarks || 'Not provided'}
-
-Provide 3-5 specific, actionable recommendations based on the current state of this application.`;
+  const prompt = `App: ${createAppSummary(application)}
+Docs: ${createDocSummary(documents)}
+Prev: ${application.previousSchoolName || 'N/A'}
+Give 3-5 actionable recommendations.`;
 
   const { result, latencyMs, error } = await callOpenAI<{ recommendations: AIRecommendation[]; confidence?: number }>(
     prompt, 
@@ -268,6 +323,8 @@ Provide 3-5 specific, actionable recommendations based on the current state of t
     confidence = 0.75;
   }
 
+  setCache(cacheKey, recommendations);
+
   logAICall({
     timestamp: new Date().toISOString(),
     feature,
@@ -292,39 +349,35 @@ export async function getAIEligibilityScore(
   const startTime = Date.now();
   const feature = "eligibility-score";
   
-  const systemPrompt = `You are an AI admission scoring system. Calculate an eligibility score (0-100) based on the application data and provided weights. Respond with JSON in this format:
-{
-  "totalScore": number,
-  "breakdown": {
-    "documentCompleteness": number,
-    "academicBackground": number,
-    "entranceTestScore": number,
-    "interviewScore": number
-  },
-  "recommendation": "string explaining the score",
-  "confidence": 0.90
-}`;
+  const appUpdated = application.updatedAt ? new Date(application.updatedAt).getTime() : 0;
+  const docUpdated = getDocUpdateHash(documents);
+  const dataHash = `${createDocSummary(documents)}:${application.previousMarks}:${application.entranceTestScore}:${application.interviewScore}:${JSON.stringify(weights)}:${appUpdated}:${docUpdated}`;
+  const cacheKey = getCacheKey(feature, application.id, dataHash);
+  const cached = getFromCache<AIEligibilityScore>(cacheKey);
+  if (cached) {
+    logAICall({
+      timestamp: new Date().toISOString(),
+      feature,
+      applicationId: application.id,
+      model: "cache",
+      inputSummary: `Application ${application.applicationNumber} (cached)`,
+      outputSummary: `Score: ${cached.totalScore}/100 from cache`,
+      confidence: 0.95,
+      latencyMs: Date.now() - startTime,
+      fallbackUsed: false,
+    });
+    return cached;
+  }
+  
+  const systemPrompt = `AI scoring system. Calculate eligibility 0-100. JSON: {"totalScore":N,"breakdown":{"documentCompleteness":N,"academicBackground":N,"entranceTestScore":N,"interviewScore":N},"recommendation":"str","confidence":0.9}`;
 
   const verifiedDocs = documents.filter(d => d.verificationStatus === 'verified').length;
   const totalDocs = documents.length;
   
-  const prompt = `Calculate eligibility score for this application:
-
-Student: ${application.studentFirstName} ${application.studentLastName}
-Grade Applied: ${application.gradeAppliedFor}
-
-Document Status: ${verifiedDocs}/${totalDocs} verified
-Previous Academic Marks: ${application.previousMarks || 'Not provided'}%
-Entrance Test Score: ${application.entranceTestScore || 'Not taken'}/100
-Interview Score: ${application.interviewScore || 'Not conducted'}/100
-
-Scoring Weights:
-- Document Completeness: ${weights.documentCompleteness}%
-- Academic Background: ${weights.academicBackground}%
-- Entrance Test: ${weights.entranceTestScore}%
-- Interview: ${weights.interviewScore}%
-
-Calculate scores for each category (0-25 points each based on weight) and provide a total score.`;
+  const prompt = `App: ${createAppSummary(application)}
+Docs: ${verifiedDocs}/${totalDocs} verified
+Weights: doc=${weights.documentCompleteness} acad=${weights.academicBackground} test=${weights.entranceTestScore} int=${weights.interviewScore}
+Calculate weighted eligibility score.`;
 
   const { result, latencyMs, error } = await callOpenAI<{ 
     totalScore: number; 
@@ -355,6 +408,8 @@ Calculate scores for each category (0-25 points each based on weight) and provid
     confidence = 0.75;
   }
 
+  setCache(cacheKey, score);
+
   logAICall({
     timestamp: new Date().toISOString(),
     feature,
@@ -378,29 +433,31 @@ export async function getAIPredictiveOutcome(
   const startTime = Date.now();
   const feature = "predictive-outcome";
   
-  const systemPrompt = `You are an AI enrollment prediction system. Predict the likelihood of successful enrollment based on the application data. Respond with JSON in this format:
-{
-  "enrollmentProbability": number (0-100),
-  "riskLevel": "low" | "medium" | "high",
-  "factors": [
-    { "factor": "string", "impact": "positive" | "negative" | "neutral", "weight": number }
-  ],
-  "recommendation": "string",
-  "confidence": 0.82
-}`;
+  const appUpdated = application.updatedAt ? new Date(application.updatedAt).getTime() : 0;
+  const docUpdated = getDocUpdateHash(documents);
+  const dataHash = `${application.status}:${createDocSummary(documents)}:${application.entranceTestScore}:${application.interviewScore}:${appUpdated}:${docUpdated}`;
+  const cacheKey = getCacheKey(feature, application.id, dataHash);
+  const cached = getFromCache<AIPredictiveOutcome>(cacheKey);
+  if (cached) {
+    logAICall({
+      timestamp: new Date().toISOString(),
+      feature,
+      applicationId: application.id,
+      model: "cache",
+      inputSummary: `Application ${application.applicationNumber} (cached)`,
+      outputSummary: `Probability: ${cached.enrollmentProbability}% from cache`,
+      confidence: 0.95,
+      latencyMs: Date.now() - startTime,
+      fallbackUsed: false,
+    });
+    return cached;
+  }
+  
+  const systemPrompt = `AI enrollment predictor. JSON: {"enrollmentProbability":N,"riskLevel":"low|medium|high","factors":[{"factor":"str","impact":"positive|negative|neutral","weight":N}],"recommendation":"str","confidence":0.82}`;
 
-  const prompt = `Predict enrollment outcome for this application:
-
-Student: ${application.studentFirstName} ${application.studentLastName}
-Status: ${application.status}
-Application Date: ${application.applicationDate}
-Documents: ${documents.length} uploaded, ${documents.filter(d => d.verificationStatus === 'verified').length} verified
-Previous School: ${application.previousSchoolName || 'N/A'}
-Previous Marks: ${application.previousMarks || 'N/A'}%
-Entrance Test: ${application.entranceTestScore || 'N/A'}/100
-Interview: ${application.interviewScore || 'N/A'}/100
-
-Analyze all factors and provide enrollment probability prediction.`;
+  const prompt = `App: ${createAppSummary(application)}
+Docs: ${createDocSummary(documents)}
+Predict enrollment probability and risk level.`;
 
   const { result, latencyMs, error } = await callOpenAI<{ 
     enrollmentProbability: number; 
@@ -431,6 +488,8 @@ Analyze all factors and provide enrollment probability prediction.`;
     usedFallback = true;
     confidence = 0.70;
   }
+
+  setCache(cacheKey, outcome);
 
   logAICall({
     timestamp: new Date().toISOString(),

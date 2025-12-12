@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
 import { format } from "date-fns";
@@ -69,6 +70,9 @@ export default function Applications() {
   const searchParams = useSearch();
   const urlCycleId = new URLSearchParams(searchParams).get("cycleId") || "";
   
+  const [searchInput, setSearchInput] = useState("");
+  const debouncedSearch = useDebounce(searchInput, 300);
+  
   const [filters, setFilters] = useState<ApplicationFilters>({
     search: "",
     cycleId: urlCycleId,
@@ -102,8 +106,8 @@ export default function Applications() {
     if (!applications) return [];
     
     return applications.filter((app) => {
-      if (filters.search) {
-        const searchLower = filters.search.toLowerCase();
+      if (debouncedSearch) {
+        const searchLower = debouncedSearch.toLowerCase();
         const matchesSearch = 
           app.applicationNumber.toLowerCase().includes(searchLower) ||
           app.studentFirstName.toLowerCase().includes(searchLower) ||
@@ -130,7 +134,7 @@ export default function Applications() {
       
       return true;
     });
-  }, [applications, filters]);
+  }, [applications, filters, debouncedSearch]);
 
   const paginatedApplications = useMemo(() => {
     const start = (page - 1) * itemsPerPage;
@@ -140,6 +144,7 @@ export default function Applications() {
   const totalPages = Math.ceil(filteredApplications.length / itemsPerPage);
 
   const clearFilters = () => {
+    setSearchInput("");
     setFilters({
       search: "",
       cycleId: "",
@@ -185,9 +190,9 @@ export default function Applications() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search by name, number, or email..."
-              value={filters.search}
+              value={searchInput}
               onChange={(e) => {
-                setFilters({ ...filters, search: e.target.value });
+                setSearchInput(e.target.value);
                 setPage(1);
               }}
               className="pl-9"

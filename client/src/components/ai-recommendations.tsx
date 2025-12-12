@@ -136,33 +136,27 @@ const outcomeLabels = {
   undetermined: "Undetermined",
 };
 
+interface ConsolidatedAIAnalysis {
+  recommendations: AIRecommendationsData;
+  eligibility: EligibilityScoreData;
+  prediction: PredictiveOutcome;
+  docSuggestions: DocumentSuggestionsData;
+  nextSteps: NextStepsData;
+  aiPowered: boolean;
+}
+
 export function AIRecommendationsPanel({ applicationId }: { applicationId: string }) {
-  const { data: recommendations, isLoading: recLoading } = useQuery<AIRecommendationsData>({
-    queryKey: ["/api/ai/recommendations", applicationId],
+  const { data: analysis, isLoading } = useQuery<ConsolidatedAIAnalysis>({
+    queryKey: ["/api/ai/analysis", applicationId],
     enabled: !!applicationId,
+    staleTime: 2 * 60 * 1000,
   });
 
-  const { data: eligibility, isLoading: eligLoading } = useQuery<EligibilityScoreData>({
-    queryKey: ["/api/ai/eligibility-score", applicationId],
-    enabled: !!applicationId,
-  });
-
-  const { data: docSuggestions, isLoading: docLoading } = useQuery<DocumentSuggestionsData>({
-    queryKey: ["/api/ai/document-suggestions", applicationId],
-    enabled: !!applicationId,
-  });
-
-  const { data: nextSteps, isLoading: stepsLoading } = useQuery<NextStepsData>({
-    queryKey: ["/api/ai/next-steps", applicationId],
-    enabled: !!applicationId,
-  });
-
-  const { data: prediction, isLoading: predLoading } = useQuery<PredictiveOutcome>({
-    queryKey: ["/api/ai/predictive-outcome", applicationId],
-    enabled: !!applicationId,
-  });
-
-  const isLoading = recLoading || eligLoading || docLoading || stepsLoading || predLoading;
+  const recommendations = analysis?.recommendations;
+  const eligibility = analysis?.eligibility;
+  const docSuggestions = analysis?.docSuggestions;
+  const nextSteps = analysis?.nextSteps;
+  const prediction = analysis?.prediction;
 
   if (isLoading) {
     return (

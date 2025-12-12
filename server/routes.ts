@@ -18,6 +18,42 @@ function validateBody<T>(schema: z.ZodSchema<T>, body: unknown): { success: true
   return { success: true, data: result.data };
 }
 
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
+
+const responseCache = new Map<string, CacheEntry<any>>();
+const CACHE_TTL_SHORT = 30 * 1000;
+const CACHE_TTL_MEDIUM = 2 * 60 * 1000;
+const CACHE_TTL_LONG = 5 * 60 * 1000;
+
+function getCachedResponse<T>(key: string): T | null {
+  const entry = responseCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    responseCache.delete(key);
+    return null;
+  }
+  return entry.data as T;
+}
+
+function setCachedResponse<T>(key: string, data: T, ttlMs: number = CACHE_TTL_MEDIUM): void {
+  responseCache.set(key, { data, expiresAt: Date.now() + ttlMs });
+  if (responseCache.size > 100) {
+    const now = Date.now();
+    for (const [k, v] of responseCache.entries()) {
+      if (now > v.expiresAt) responseCache.delete(k);
+    }
+  }
+}
+
+function invalidateCache(pattern: string): void {
+  for (const key of responseCache.keys()) {
+    if (key.includes(pattern)) responseCache.delete(key);
+  }
+}
+
 const cycleStatusSchema = z.object({
   status: z.enum(["draft", "open", "closed", "archived"]),
 });
@@ -48,11 +84,50 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  // Dashboard Stats
+  // Dashboard Stats (cached)
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
+      const cacheKey = "dashboard:stats";
+      const cached = getCachedResponse(cacheKey);
+      if (cached) return res.json(cached);
+      
       const stats = await storage.getDashboardStats();
+      setCachedResponse(cacheKey, stats, CACHE_TTL_SHORT);
       res.json(stats);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Consolidated Dashboard Data (reduces frontend API calls)
+  app.get("/api/dashboard/consolidated", async (req, res) => {
+    try {
+      const cacheKey = "dashboard:consolidated";
+      const cached = getCachedResponse(cacheKey);
+      if (cached) return res.json(cached);
+      
+      const [stats, activeCycle, recentApplications, scheduledEvents] = await Promise.all([
+        storage.getDashboardStats(),
+        storage.getActiveAdmissionCycle(),
+        storage.getRecentApplications(10),
+        storage.getScheduledEvents(),
+      ]);
+      
+      let seatConfigs: any[] = [];
+      if (activeCycle) {
+        seatConfigs = await storage.getSeatConfigs(activeCycle.id);
+      }
+      
+      const result = {
+        stats,
+        activeCycle,
+        recentApplications,
+        scheduledEvents,
+        seatConfigs,
+      };
+      
+      setCachedResponse(cacheKey, result, CACHE_TTL_SHORT);
+      res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -708,6 +783,67 @@ export async function registerRoutes(
 
   // AI-First Features (v3.0.0 - Now powered by OpenAI GPT-5 with fallback to rule-based)
 
+  // Consolidated AI Analysis (reduces multiple API calls to one)
+  app.get("/api/ai/analysis/:id", async (req, res) => {
+    try {
+      const cacheKey = `ai:analysis:${req.params.id}`;
+      const cached = getCachedResponse(cacheKey);
+      if (cached) return res.json(cached);
+      
+      const application = await storage.getApplication(req.params.id);
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+      const documents = await storage.getApplicationDocuments(req.params.id);
+      const scoringWeights = await storage.getScoringWeightConfig();
+      
+      const weights = {
+        documentCompleteness: scoringWeights?.documentCompleteness || 25,
+        academicBackground: scoringWeights?.academicBackground || 25,
+        entranceTestScore: scoringWeights?.entranceTestScore || 25,
+        interviewScore: scoringWeights?.interviewScore || 25
+      };
+      
+      const { getAIRecommendations, getAIEligibilityScore, getAIPredictiveOutcome, isOpenAIConfigured } = await import("./openai");
+      
+      const [recommendations, eligibility, prediction] = await Promise.all([
+        getAIRecommendations(application, documents),
+        getAIEligibilityScore(application, documents, weights),
+        getAIPredictiveOutcome(application, documents),
+      ]);
+      
+      const docSuggestions = generateDocumentSuggestions({ ...application, documents });
+      const nextSteps = recommendations
+        .filter(r => r.type === "action")
+        .map((r, i) => ({
+          step: i + 1,
+          action: r.title,
+          description: r.description,
+          estimatedTime: "5-10 min",
+          priority: r.priority === "high" ? "immediate" : r.priority === "medium" ? "soon" : "later",
+          automated: false,
+        }));
+      
+      const result = {
+        recommendations: { recommendations, summary: `${recommendations.length} recommendations` },
+        eligibility: { ...eligibility, aiPowered: isOpenAIConfigured },
+        prediction: { 
+          ...prediction, 
+          predictedOutcome: prediction.enrollmentProbability >= 70 ? "likely_enroll" : prediction.enrollmentProbability >= 40 ? "moderate_chance" : "unlikely",
+          aiPowered: isOpenAIConfigured 
+        },
+        docSuggestions,
+        nextSteps: { steps: nextSteps, currentPhase: application.status, progressPercent: 50 },
+        aiPowered: isOpenAIConfigured,
+      };
+      
+      setCachedResponse(cacheKey, result, CACHE_TTL_MEDIUM);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // AI Recommendations for Application Processing
   app.get("/api/ai/recommendations/:id", async (req, res) => {
     try {
@@ -944,13 +1080,11 @@ export async function registerRoutes(
   // AI Document Batch Scoring
   app.get("/api/ai/document-batch-score", async (req, res) => {
     try {
-      const applications = await storage.getApplications();
-      const applicationsWithDocs = await Promise.all(
-        applications.map(async (app) => {
-          const documents = await storage.getApplicationDocuments(app.id);
-          return { ...app, documents };
-        })
-      );
+      const appsWithDocs = await storage.getApplicationsWithDocuments();
+      const applicationsWithDocs = appsWithDocs.map(({ application, documents }) => ({
+        ...application,
+        documents,
+      }));
       const batchScores = generateDocumentBatchScores(applicationsWithDocs);
       res.json(batchScores);
     } catch (error: any) {
@@ -989,13 +1123,11 @@ export async function registerRoutes(
   // AI Anomaly Detection (v2.5.0)
   app.get("/api/ai/anomaly-detection", async (req, res) => {
     try {
-      const applications = await storage.getApplications();
-      const applicationsWithDocs = await Promise.all(
-        applications.map(async (app) => {
-          const documents = await storage.getApplicationDocuments(app.id);
-          return { ...app, documents };
-        })
-      );
+      const appsWithDocs = await storage.getApplicationsWithDocuments();
+      const applicationsWithDocs = appsWithDocs.map(({ application, documents }) => ({
+        ...application,
+        documents,
+      }));
       const anomalies = detectAnomalies(applicationsWithDocs);
       res.json(anomalies);
     } catch (error: any) {

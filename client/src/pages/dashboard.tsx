@@ -46,29 +46,25 @@ interface ScheduledEvent {
   grade: string;
 }
 
+interface ConsolidatedDashboard {
+  stats: DashboardStats;
+  activeCycle: AdmissionCycle | null;
+  recentApplications: RecentApplication[];
+  scheduledEvents: ScheduledEvent[];
+  seatConfigs: GradeSeatConfig[];
+}
+
 export default function Dashboard() {
-  const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
-    queryKey: ["/api/dashboard/stats"],
+  const { data: consolidated, isLoading } = useQuery<ConsolidatedDashboard>({
+    queryKey: ["/api/dashboard/consolidated"],
+    staleTime: 30 * 1000,
   });
 
-  const { data: activeCycle, isLoading: cycleLoading } = useQuery<AdmissionCycle>({
-    queryKey: ["/api/admission/cycles/active"],
-  });
-
-  const { data: recentApplications, isLoading: applicationsLoading } = useQuery<RecentApplication[]>({
-    queryKey: ["/api/admission/applications/recent"],
-  });
-
-  const { data: seatConfigs, isLoading: seatsLoading } = useQuery<GradeSeatConfig[]>({
-    queryKey: ["/api/admission/cycles", activeCycle?.id, "seats"],
-    enabled: !!activeCycle?.id,
-  });
-
-  const { data: scheduledEvents, isLoading: eventsLoading } = useQuery<ScheduledEvent[]>({
-    queryKey: ["/api/analytics/scheduled-events"],
-  });
-
-  const isLoading = statsLoading || cycleLoading;
+  const stats = consolidated?.stats;
+  const activeCycle = consolidated?.activeCycle;
+  const recentApplications = consolidated?.recentApplications;
+  const seatConfigs = consolidated?.seatConfigs;
+  const scheduledEvents = consolidated?.scheduledEvents;
 
   if (isLoading) {
     return <DashboardSkeleton />;
@@ -215,16 +211,7 @@ export default function Dashboard() {
             <Users className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {seatsLoading ? (
-              <div className="space-y-3">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="animate-pulse">
-                    <div className="h-4 bg-muted rounded w-full mb-2" />
-                    <div className="h-2 bg-muted rounded w-3/4" />
-                  </div>
-                ))}
-              </div>
-            ) : seatConfigs && seatConfigs.length > 0 ? (
+            {seatConfigs && seatConfigs.length > 0 ? (
               <div className="space-y-4">
                 {seatConfigs.slice(0, 5).map((config) => {
                   const filled = config.totalSeats - config.availableSeats;
@@ -286,20 +273,7 @@ export default function Dashboard() {
             </Link>
           </CardHeader>
           <CardContent>
-            {applicationsLoading ? (
-              <div className="space-y-3">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="animate-pulse flex items-center gap-4 p-3 rounded-lg border">
-                    <div className="h-10 w-10 bg-muted rounded-full" />
-                    <div className="flex-1 space-y-2">
-                      <div className="h-4 bg-muted rounded w-1/3" />
-                      <div className="h-3 bg-muted rounded w-1/4" />
-                    </div>
-                    <div className="h-6 bg-muted rounded w-24" />
-                  </div>
-                ))}
-              </div>
-            ) : recentApplications && recentApplications.length > 0 ? (
+            {recentApplications && recentApplications.length > 0 ? (
               <div className="space-y-3">
                 {recentApplications.map((app) => (
                   <Link key={app.id} href={`/applications/${app.id}`}>
@@ -347,16 +321,7 @@ export default function Dashboard() {
             <Calendar className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {eventsLoading ? (
-              <div className="space-y-3">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="animate-pulse p-3 rounded-lg border">
-                    <div className="h-4 bg-muted rounded w-2/3 mb-2" />
-                    <div className="h-3 bg-muted rounded w-1/2" />
-                  </div>
-                ))}
-              </div>
-            ) : scheduledEvents && scheduledEvents.length > 0 ? (
+            {scheduledEvents && scheduledEvents.length > 0 ? (
               <div className="space-y-3">
                 {scheduledEvents.slice(0, 5).map((event) => (
                   <Link key={event.id} href={`/applications/${event.id}`}>

@@ -20,6 +20,11 @@ import {
 import { db } from "./db";
 import { eq, desc, and, sql, inArray } from "drizzle-orm";
 
+export interface ApplicationWithDocuments {
+  application: AdmissionApplication;
+  documents: ApplicationDocument[];
+}
+
 export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
@@ -50,6 +55,11 @@ export interface IStorage {
   updateApplication(id: string, application: Partial<InsertAdmissionApplication>): Promise<AdmissionApplication | undefined>;
   updateApplicationStatus(id: string, status: string, remarks?: string): Promise<AdmissionApplication | undefined>;
   generateApplicationNumber(cycleId: string): Promise<string>;
+  
+  // Bulk loading (N+1 optimization)
+  getApplicationsWithDocuments(): Promise<ApplicationWithDocuments[]>;
+  getApplicationsWithDocumentsByIds(ids: string[]): Promise<ApplicationWithDocuments[]>;
+  getDocumentsForApplications(applicationIds: string[]): Promise<Map<string, ApplicationDocument[]>>;
   
   // Documents
   getApplicationDocuments(applicationId: string): Promise<ApplicationDocument[]>;
@@ -222,6 +232,69 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(admissionApplications)
       .orderBy(desc(admissionApplications.createdAt))
       .limit(limit);
+  }
+
+  async getApplicationsWithDocuments(): Promise<ApplicationWithDocuments[]> {
+    const applications = await db.select().from(admissionApplications)
+      .orderBy(desc(admissionApplications.createdAt));
+    
+    if (applications.length === 0) return [];
+    
+    const appIds = applications.map(a => a.id);
+    const allDocs = await db.select().from(applicationDocuments)
+      .where(inArray(applicationDocuments.applicationId, appIds));
+    
+    const docsByApp = new Map<string, ApplicationDocument[]>();
+    allDocs.forEach(doc => {
+      const docs = docsByApp.get(doc.applicationId) || [];
+      docs.push(doc);
+      docsByApp.set(doc.applicationId, docs);
+    });
+    
+    return applications.map(app => ({
+      application: app,
+      documents: docsByApp.get(app.id) || [],
+    }));
+  }
+
+  async getApplicationsWithDocumentsByIds(ids: string[]): Promise<ApplicationWithDocuments[]> {
+    if (ids.length === 0) return [];
+    
+    const applications = await db.select().from(admissionApplications)
+      .where(inArray(admissionApplications.id, ids));
+    
+    if (applications.length === 0) return [];
+    
+    const allDocs = await db.select().from(applicationDocuments)
+      .where(inArray(applicationDocuments.applicationId, ids));
+    
+    const docsByApp = new Map<string, ApplicationDocument[]>();
+    allDocs.forEach(doc => {
+      const docs = docsByApp.get(doc.applicationId) || [];
+      docs.push(doc);
+      docsByApp.set(doc.applicationId, docs);
+    });
+    
+    return applications.map(app => ({
+      application: app,
+      documents: docsByApp.get(app.id) || [],
+    }));
+  }
+
+  async getDocumentsForApplications(applicationIds: string[]): Promise<Map<string, ApplicationDocument[]>> {
+    if (applicationIds.length === 0) return new Map();
+    
+    const allDocs = await db.select().from(applicationDocuments)
+      .where(inArray(applicationDocuments.applicationId, applicationIds));
+    
+    const docsByApp = new Map<string, ApplicationDocument[]>();
+    allDocs.forEach(doc => {
+      const docs = docsByApp.get(doc.applicationId) || [];
+      docs.push(doc);
+      docsByApp.set(doc.applicationId, docs);
+    });
+    
+    return docsByApp;
   }
 
   async createApplication(application: InsertAdmissionApplication): Promise<AdmissionApplication> {
