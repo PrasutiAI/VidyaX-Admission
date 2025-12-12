@@ -3,14 +3,14 @@ import type { AdmissionApplication, ApplicationDocument } from "@shared/schema";
 
 const AI_CONFIG = {
   model: "gpt-4o-mini",
-  version: "4.5.0",
+  version: "4.6.0",
   temperature: 0.3,
   maxTokens: 512,
   tokenBudgets: {
-    simple: 192,      // Further optimized for simple operations
-    standard: 384,    // Reduced from 512 for cost efficiency
-    complex: 768,     // Reduced from 1024 for better efficiency
-    bulk: 128,        // New: minimal tokens for batch operations
+    simple: 192,      // Status checks, basic scoring
+    standard: 384,    // Recommendations, eligibility
+    complex: 768,     // Detailed analysis, comparisons
+    bulk: 128,        // Batch operations, minimal tokens
   },
   confidenceThresholds: {
     recommendations: 0.70,
@@ -34,15 +34,20 @@ const AI_CONFIG = {
   parallelBatching: true,
   throughputTracking: true,
   errorRateTracking: true,
-  // v4.5.0 New features
+  // v4.5.0+ Features
   circuitBreakerEnabled: true,
-  circuitBreakerThreshold: 5,     // Number of failures before opening circuit
-  circuitBreakerResetMs: 30000,   // Time to wait before retry after circuit opens
-  promptCompressionLevel: 2,      // 0=none, 1=basic, 2=aggressive
+  circuitBreakerThreshold: 5,
+  circuitBreakerResetMs: 30000,
+  promptCompressionLevel: 2,
   responseValidation: true,
   smartRetry: true,
   maxRetries: 2,
   retryDelayMs: 1000,
+  // v4.6.0 New features
+  connectionPooling: true,
+  streamingReady: true,
+  enhancedAudit: true,
+  memoryOptimization: true,
 };
 
 interface CacheStats {
