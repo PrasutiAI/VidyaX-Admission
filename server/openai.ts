@@ -3,7 +3,7 @@ import type { AdmissionApplication, ApplicationDocument } from "@shared/schema";
 
 const AI_CONFIG = {
   model: "gpt-4o-mini",
-  version: "3.2.1",
+  version: "4.3.0",
   maxTokens: 512,
   temperature: 0.3,
   confidenceThresholds: {
@@ -20,6 +20,11 @@ const AI_CONFIG = {
   cacheTTLMs: 5 * 60 * 1000,
   maxCacheEntries: 500,
   batchSize: 10,
+  // v4.3.0 Enhanced features
+  lruEviction: true,
+  requestDeduplication: true,
+  compressionEnabled: true,
+  performanceTracking: true,
 };
 
 interface CacheStats {
@@ -29,10 +34,73 @@ interface CacheStats {
   hitRate: number;
   oldestEntry: string | null;
   newestEntry: string | null;
+  // v4.3.0 Enhanced stats
+  evictionCount: number;
+  deduplicatedRequests: number;
+  avgLatencyMs: number;
+  memoryEstimateKB: number;
+  featureBreakdown: Record<string, { hits: number; misses: number }>;
 }
 
 let cacheHitCount = 0;
 let cacheMissCount = 0;
+let evictionCount = 0;
+let deduplicatedRequests = 0;
+let totalLatencyMs = 0;
+let latencyCount = 0;
+const featureStats: Record<string, { hits: number; misses: number }> = {};
+
+// v4.3.0 Request deduplication - prevents duplicate concurrent API calls
+const pendingRequests = new Map<string, Promise<any>>();
+
+// v4.3.0 LRU tracking - tracks last access time for eviction
+const lruAccessOrder: string[] = [];
+
+function trackLatency(ms: number): void {
+  if (AI_CONFIG.performanceTracking) {
+    totalLatencyMs += ms;
+    latencyCount++;
+  }
+}
+
+function trackFeatureAccess(feature: string, isHit: boolean): void {
+  if (!featureStats[feature]) {
+    featureStats[feature] = { hits: 0, misses: 0 };
+  }
+  if (isHit) {
+    featureStats[feature].hits++;
+  } else {
+    featureStats[feature].misses++;
+  }
+}
+
+function updateLRU(key: string): void {
+  if (!AI_CONFIG.lruEviction) return;
+  const index = lruAccessOrder.indexOf(key);
+  if (index > -1) {
+    lruAccessOrder.splice(index, 1);
+  }
+  lruAccessOrder.push(key);
+}
+
+function evictLRU(): void {
+  if (!AI_CONFIG.lruEviction || lruAccessOrder.length === 0) return;
+  const keyToEvict = lruAccessOrder.shift();
+  if (keyToEvict) {
+    aiCache.delete(keyToEvict);
+    evictionCount++;
+  }
+}
+
+function estimateCacheMemory(): number {
+  let totalBytes = 0;
+  for (const [key, entry] of aiCache.entries()) {
+    totalBytes += key.length * 2;
+    totalBytes += JSON.stringify(entry.data).length * 2;
+    totalBytes += 24;
+  }
+  return Math.round(totalBytes / 1024);
+}
 
 export function getCacheStats(): CacheStats {
   let oldestTimestamp = Infinity;
@@ -59,7 +127,28 @@ export function getCacheStats(): CacheStats {
     hitRate: totalRequests > 0 ? Math.round((cacheHitCount / totalRequests) * 100) : 0,
     oldestEntry: oldestKey,
     newestEntry: newestKey,
+    evictionCount,
+    deduplicatedRequests,
+    avgLatencyMs: latencyCount > 0 ? Math.round(totalLatencyMs / latencyCount) : 0,
+    memoryEstimateKB: estimateCacheMemory(),
+    featureBreakdown: { ...featureStats },
   };
+}
+
+export function resetCacheStats(): void {
+  cacheHitCount = 0;
+  cacheMissCount = 0;
+  evictionCount = 0;
+  deduplicatedRequests = 0;
+  totalLatencyMs = 0;
+  latencyCount = 0;
+  Object.keys(featureStats).forEach(key => delete featureStats[key]);
+}
+
+export function clearCache(): void {
+  aiCache.clear();
+  lruAccessOrder.length = 0;
+  evictionCount = 0;
 }
 
 const isOpenAIConfigured = !!process.env.OPENAI_API_KEY;
@@ -80,40 +169,86 @@ function getCacheKey(feature: string, applicationId?: string, dataHash?: string)
   return `${feature}:${applicationId || 'global'}:${dataHash || 'default'}`;
 }
 
-function getFromCache<T>(key: string): T | null {
+function getFromCache<T>(key: string, feature?: string): T | null {
   if (!AI_CONFIG.cacheEnabled) {
     cacheMissCount++;
+    if (feature) trackFeatureAccess(feature, false);
     return null;
   }
   const entry = aiCache.get(key);
   if (!entry) {
     cacheMissCount++;
+    if (feature) trackFeatureAccess(feature, false);
     return null;
   }
   if (Date.now() > entry.expiresAt) {
     aiCache.delete(key);
+    // Remove from LRU order
+    const lruIndex = lruAccessOrder.indexOf(key);
+    if (lruIndex > -1) lruAccessOrder.splice(lruIndex, 1);
     cacheMissCount++;
+    if (feature) trackFeatureAccess(feature, false);
     return null;
   }
   cacheHitCount++;
+  if (feature) trackFeatureAccess(feature, true);
+  // Update LRU access order
+  updateLRU(key);
   return entry.data as T;
 }
 
 function setCache<T>(key: string, data: T): void {
   if (!AI_CONFIG.cacheEnabled) return;
   const now = Date.now();
+  
+  // Check if we need to evict entries
+  if (aiCache.size >= AI_CONFIG.maxCacheEntries) {
+    if (AI_CONFIG.lruEviction) {
+      // v4.3.0 LRU eviction - remove least recently used entries
+      while (aiCache.size >= AI_CONFIG.maxCacheEntries && lruAccessOrder.length > 0) {
+        evictLRU();
+      }
+    } else {
+      // Fallback: evict expired entries
+      const keysToDelete: string[] = [];
+      for (const [k, v] of aiCache.entries()) {
+        if (now > v.expiresAt) keysToDelete.push(k);
+      }
+      keysToDelete.forEach(k => {
+        aiCache.delete(k);
+        evictionCount++;
+      });
+    }
+  }
+  
   aiCache.set(key, {
     data,
     timestamp: now,
     expiresAt: now + AI_CONFIG.cacheTTLMs,
   });
-  if (aiCache.size > 500) {
-    const keysToDelete: string[] = [];
-    for (const [k, v] of aiCache.entries()) {
-      if (Date.now() > v.expiresAt) keysToDelete.push(k);
-    }
-    keysToDelete.forEach(k => aiCache.delete(k));
+  updateLRU(key);
+}
+
+// v4.3.0 Request deduplication - prevents duplicate concurrent API calls for the same data
+async function deduplicateRequest<T>(key: string, requestFn: () => Promise<T>): Promise<T> {
+  if (!AI_CONFIG.requestDeduplication) {
+    return requestFn();
   }
+  
+  // Check if there's already a pending request for this key
+  const pendingRequest = pendingRequests.get(key);
+  if (pendingRequest) {
+    deduplicatedRequests++;
+    return pendingRequest as Promise<T>;
+  }
+  
+  // Create new request and store it
+  const request = requestFn().finally(() => {
+    pendingRequests.delete(key);
+  });
+  
+  pendingRequests.set(key, request);
+  return request;
 }
 
 function createAppSummary(app: AdmissionApplication): string {
@@ -276,34 +411,44 @@ async function callOpenAI<T>(
   const startTime = Date.now();
   
   if (!isOpenAIConfigured || !openai) {
-    return { result: null, latencyMs: Date.now() - startTime, error: "OpenAI not configured" };
+    const latencyMs = Date.now() - startTime;
+    trackLatency(latencyMs);
+    return { result: null, latencyMs, error: "OpenAI not configured" };
   }
 
+  // v4.3.0 Request deduplication for concurrent identical requests
+  const requestKey = `openai:${feature}:${applicationId || 'global'}`;
+  
   try {
-    const sanitizedPrompt = sanitizePII(prompt);
-    
-    const response = await openai.chat.completions.create({
-      model: AI_CONFIG.model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: sanitizedPrompt },
-      ],
-      response_format: { type: "json_object" },
-      max_completion_tokens: AI_CONFIG.maxTokens,
-      temperature: AI_CONFIG.temperature,
+    const result = await deduplicateRequest(requestKey, async () => {
+      const sanitizedPrompt = sanitizePII(prompt);
+      
+      const response = await openai.chat.completions.create({
+        model: AI_CONFIG.model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: sanitizedPrompt },
+        ],
+        response_format: { type: "json_object" },
+        max_completion_tokens: AI_CONFIG.maxTokens,
+        temperature: AI_CONFIG.temperature,
+      });
+
+      const content = response.choices[0].message.content;
+      
+      if (!content) {
+        throw new Error("Empty response from OpenAI");
+      }
+      
+      return JSON.parse(content) as T;
     });
 
-    const content = response.choices[0].message.content;
     const latencyMs = Date.now() - startTime;
-    
-    if (!content) {
-      return { result: null, latencyMs, error: "Empty response from OpenAI" };
-    }
-    
-    const parsed = JSON.parse(content) as T;
-    return { result: parsed, latencyMs };
+    trackLatency(latencyMs);
+    return { result, latencyMs };
   } catch (error) {
     const latencyMs = Date.now() - startTime;
+    trackLatency(latencyMs);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error(`[AI Error] ${feature}: ${errorMessage}`);
     return { result: null, latencyMs, error: errorMessage };
@@ -321,8 +466,10 @@ export async function getAIRecommendations(
   const docUpdated = getDocUpdateHash(documents);
   const dataHash = `${application.status}:${createDocSummary(documents)}:${application.entranceTestScore}:${application.interviewScore}:${appUpdated}:${docUpdated}`;
   const cacheKey = getCacheKey(feature, application.id, dataHash);
-  const cached = getFromCache<AIRecommendation[]>(cacheKey);
+  const cached = getFromCache<AIRecommendation[]>(cacheKey, feature);
   if (cached) {
+    const latencyMs = Date.now() - startTime;
+    trackLatency(latencyMs);
     logAICall({
       timestamp: new Date().toISOString(),
       feature,
@@ -331,7 +478,7 @@ export async function getAIRecommendations(
       inputSummary: `Application ${application.applicationNumber} (cached)`,
       outputSummary: `${cached.length} recommendations from cache`,
       confidence: 0.95,
-      latencyMs: Date.now() - startTime,
+      latencyMs,
       fallbackUsed: false,
     });
     return cached;
@@ -404,8 +551,10 @@ export async function getAIEligibilityScore(
   const docUpdated = getDocUpdateHash(documents);
   const dataHash = `${createDocSummary(documents)}:${application.previousMarks}:${application.entranceTestScore}:${application.interviewScore}:${JSON.stringify(weights)}:${appUpdated}:${docUpdated}`;
   const cacheKey = getCacheKey(feature, application.id, dataHash);
-  const cached = getFromCache<AIEligibilityScore>(cacheKey);
+  const cached = getFromCache<AIEligibilityScore>(cacheKey, feature);
   if (cached) {
+    const latencyMs = Date.now() - startTime;
+    trackLatency(latencyMs);
     logAICall({
       timestamp: new Date().toISOString(),
       feature,
@@ -414,7 +563,7 @@ export async function getAIEligibilityScore(
       inputSummary: `Application ${application.applicationNumber} (cached)`,
       outputSummary: `Score: ${cached.totalScore}/100 from cache`,
       confidence: 0.95,
-      latencyMs: Date.now() - startTime,
+      latencyMs,
       fallbackUsed: false,
     });
     return cached;
@@ -488,8 +637,10 @@ export async function getAIPredictiveOutcome(
   const docUpdated = getDocUpdateHash(documents);
   const dataHash = `${application.status}:${createDocSummary(documents)}:${application.entranceTestScore}:${application.interviewScore}:${appUpdated}:${docUpdated}`;
   const cacheKey = getCacheKey(feature, application.id, dataHash);
-  const cached = getFromCache<AIPredictiveOutcome>(cacheKey);
+  const cached = getFromCache<AIPredictiveOutcome>(cacheKey, feature);
   if (cached) {
+    const latencyMs = Date.now() - startTime;
+    trackLatency(latencyMs);
     logAICall({
       timestamp: new Date().toISOString(),
       feature,
@@ -498,7 +649,7 @@ export async function getAIPredictiveOutcome(
       inputSummary: `Application ${application.applicationNumber} (cached)`,
       outputSummary: `Probability: ${cached.enrollmentProbability}% from cache`,
       confidence: 0.95,
-      latencyMs: Date.now() - startTime,
+      latencyMs,
       fallbackUsed: false,
     });
     return cached;

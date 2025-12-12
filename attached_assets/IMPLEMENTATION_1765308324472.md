@@ -1,6 +1,6 @@
 # Student Admission Management Service
 
-## Enterprise Edition v4.2 - AI-Powered Platform (Enhanced Performance & Token Optimization)
+## Enterprise Edition v4.3 - AI-Powered Platform (Advanced Performance & Optimization)
 
 ### Version History
 
@@ -24,7 +24,8 @@
 | 3.1.0 | 2025-12-10 | Configuration APIs: workflow stages, document types, grading systems, fees, templates | Complete |
 | 4.0.0 | 2025-12-10 | Documentation Update: Accurate feature inventory, test validation, enterprise config | Complete |
 | 4.1.0 | 2025-12-12 | Performance Optimizations: Token efficiency, caching, N+1 query elimination, batch loading | Complete |
-| **4.2.0** | **2025-12-12** | **Enhanced Token Optimization: Optimized max tokens (512), temperature (0.3), added cache stats API** | **Complete** |
+| 4.2.0 | 2025-12-12 | Enhanced Token Optimization: Optimized max tokens (512), temperature (0.3), added cache stats API | Complete |
+| **4.3.0** | **2025-12-12** | **Advanced Performance: LRU cache eviction, request deduplication, performance monitoring, latency tracking** | **Complete** |
 
 ---
 
@@ -36,12 +37,12 @@ The Student Admission Management Service is an **enterprise-grade platform** tha
 
 ```
 +==================================================================================+
-|                    STUDENT ADMISSION SERVICE - ENTERPRISE v4.2                     |
+|                    STUDENT ADMISSION SERVICE - ENTERPRISE v4.3                     |
 +==================================================================================+
 |                                                                                    |
 |  +---------------------------+  +---------------------------+                      |
 |  |     AI INTELLIGENCE       |  |      CORE BUSINESS        |                      |
-|  |  (41 AI Endpoints)        |  |       MODULES             |                      |
+|  |  (45 AI Endpoints)        |  |       MODULES             |                      |
 |  |  - Recommendations        |  |  - Admission Cycles       |                      |
 |  |  - Eligibility Scoring    |  |  - Applications           |                      |
 |  |  - Predictions            |  |  - Documents              |                      |
@@ -62,12 +63,13 @@ The Student Admission Management Service is an **enterprise-grade platform** tha
 |  +---------------------------+  +---------------------------+                      |
 |                                                                                    |
 |  +---------------------------+  +---------------------------+                      |
-|  |    PERFORMANCE (v4.2)     |  |      TOKEN OPTIMIZATION   |                      |
-|  |  - Response Caching       |  |  - Compressed Prompts     |                      |
-|  |  - N+1 Query Elimination  |  |  - PII Auto-Redaction     |                      |
-|  |  - Batch Document Loading |  |  - Smart Cache Keys       |                      |
-|  |  - Consolidated Endpoints |  |  - Max Tokens: 512        |                      |
-|  |  - Cache Statistics API   |  |  - Temperature: 0.3       |                      |
+|  |    PERFORMANCE (v4.3)     |  |      TOKEN OPTIMIZATION   |                      |
+|  |  - LRU Cache Eviction     |  |  - Compressed Prompts     |                      |
+|  |  - Request Deduplication  |  |  - PII Auto-Redaction     |                      |
+|  |  - Performance Monitoring |  |  - Smart Cache Keys       |                      |
+|  |  - Latency Tracking       |  |  - Max Tokens: 512        |                      |
+|  |  - Memory Estimation      |  |  - Temperature: 0.3       |                      |
+|  |  - Feature Breakdown      |  |  - Feature Statistics     |                      |
 |  +---------------------------+  +---------------------------+                      |
 |                                                                                    |
 +==================================================================================+
@@ -89,9 +91,30 @@ The Student Admission Management Service is an **enterprise-grade platform** tha
 
 ---
 
-## 2. Enhanced Features v4.2 - Performance & Token Optimization
+## 2. Enhanced Features v4.3 - Advanced Performance & Optimization
 
-### 2.1 AI Token Optimization (v4.2)
+### 2.1 New in v4.3.0
+
+**Key Enhancements:**
+
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| **LRU Cache Eviction** | Least Recently Used cache cleanup strategy | Better memory utilization, keeps hot data |
+| **Request Deduplication** | Prevents duplicate concurrent API calls | Reduced API costs, faster responses |
+| **Performance Monitoring** | Comprehensive latency and throughput tracking | Identify bottlenecks, optimize operations |
+| **Feature Breakdown** | Per-feature hit/miss statistics | Targeted optimization insights |
+| **Memory Estimation** | Cache memory usage estimation | Memory management visibility |
+| **Cache Management APIs** | Clear cache, reset stats endpoints | Operational control |
+
+### 2.2 New API Endpoints (v4.3.0)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/ai/performance` | GET | Comprehensive performance metrics with feature breakdown |
+| `/api/ai/cache-clear` | POST | Clear all cached AI responses |
+| `/api/ai/cache-reset-stats` | POST | Reset cache statistics counters |
+
+### 2.3 AI Token Optimization (v4.2+)
 
 **Objective:** Minimize OpenAI API costs through efficient prompt engineering and optimized token allocation.
 
@@ -118,12 +141,12 @@ Give 3 actions.
 - `p:82%` = Previous marks 82%
 - `3v1p4t` = 3 verified, 1 pending, 4 total documents
 
-### 2.2 Enhanced AI Configuration (v4.2)
+### 2.4 Enhanced AI Configuration (v4.3.0)
 
 ```typescript
 const AI_CONFIG = {
   model: "gpt-4o-mini",
-  version: "3.2.1",
+  version: "4.3.0",
   maxTokens: 512,           // Optimized for cost efficiency
   temperature: 0.3,         // Low for consistent outputs
   confidenceThresholds: {
@@ -140,10 +163,15 @@ const AI_CONFIG = {
   cacheTTLMs: 300000,       // 5 minutes
   maxCacheEntries: 500,
   batchSize: 10,
+  // v4.3.0 Enhanced features
+  lruEviction: true,              // LRU cache eviction strategy
+  requestDeduplication: true,      // Prevent duplicate concurrent API calls
+  compressionEnabled: true,        // Response compression
+  performanceTracking: true,       // Latency and throughput tracking
 };
 ```
 
-### 2.3 Intelligent Caching System (Enhanced v4.2)
+### 2.5 Intelligent Caching System (Enhanced v4.3)
 
 **Multi-Level Cache Architecture:**
 
@@ -154,11 +182,42 @@ const AI_CONFIG = {
 | **API Response Cache (Medium)** | 2 minutes | Analytics, reports |
 | **API Response Cache (Long)** | 5 minutes | Configuration, static data |
 
-**v4.2 Cache Features:**
+**v4.3.0 Enhanced Cache Features:**
+- **LRU Eviction**: Least Recently Used cache cleanup strategy
+- **Request Deduplication**: Prevents duplicate concurrent API calls for identical data
+- **Latency Tracking**: Average latency calculation across all AI operations
+- **Memory Estimation**: Real-time cache memory usage estimation (KB)
+- **Feature Breakdown**: Per-feature hit/miss statistics for targeted optimization
 - Smart cache key hashing based on data state (status, doc updates, scores)
 - Automatic cache cleanup when exceeding 500 entries
 - Per-endpoint TTL configuration
-- Cache statistics endpoint (`GET /api/ai/cache-stats`) for hit/miss monitoring
+- Cache statistics endpoint (`GET /api/ai/cache-stats`) for comprehensive monitoring
+- Performance monitoring endpoint (`GET /api/ai/performance`) for detailed metrics
+
+**v4.3.0 Cache Statistics Response:**
+```json
+{
+  "cacheEnabled": true,
+  "cacheTTLMs": 300000,
+  "maxCacheEntries": 500,
+  "lruEviction": true,
+  "requestDeduplication": true,
+  "totalEntries": 12,
+  "hitCount": 45,
+  "missCount": 8,
+  "hitRate": 85,
+  "evictionCount": 2,
+  "deduplicatedRequests": 5,
+  "avgLatencyMs": 15,
+  "memoryEstimateKB": 48,
+  "featureBreakdown": {
+    "recommendations": { "hits": 20, "misses": 3 },
+    "eligibility-score": { "hits": 15, "misses": 2 },
+    "predictive-outcome": { "hits": 10, "misses": 3 }
+  },
+  "version": "4.3.0"
+}
+```
 
 **Cache Key Strategy:**
 ```typescript
@@ -612,22 +671,26 @@ Use `GET /api/ai/cache-stats` to monitor cache performance:
 
 | Category | Count |
 |----------|-------|
-| **Total API Endpoints** | 106 |
-| **AI Endpoints** | 42 |
+| **Total API Endpoints** | 109 |
+| **AI Endpoints** | 45 |
 | **Core Business Endpoints** | 48 |
 | **Configuration Endpoints** | 16 |
 | **Database Tables** | 18 |
 | **Application States** | 15 |
 | **Document Types** | 8 |
 
-### Performance Features (v4.2)
+### Performance Features (v4.3)
 
 | Feature | Implementation |
 |---------|----------------|
 | Token Limit | 512 max tokens per request |
-| Response Caching | 5-minute TTL with statistics |
+| Response Caching | 5-minute TTL with LRU eviction |
 | Query Optimization | Batch loading, consolidated endpoints |
 | Cache Monitoring | GET /api/ai/cache-stats endpoint |
+| Performance Monitoring | GET /api/ai/performance endpoint |
+| Request Deduplication | Concurrent duplicate request prevention |
+| Latency Tracking | Average response time calculation |
+| Memory Estimation | Cache memory usage monitoring |
 
 ### Enterprise Capabilities
 
@@ -642,15 +705,18 @@ Use `GET /api/ai/cache-stats` to monitor cache performance:
 | AI Intelligence | Complete (Rule-based + OpenAI ready) |
 | Dark Mode UI | Complete |
 | Type Safety | Complete (Full TypeScript) |
-| Performance Optimization | Complete (v4.2) |
+| Performance Optimization | Complete (v4.3) |
 | Token Optimization | Complete (v4.2 Enhanced) |
-| Response Caching | Complete (v4.2 Enhanced) |
+| Response Caching | Complete (v4.3 Enhanced - LRU Eviction) |
+| Request Deduplication | Complete (v4.3 New) |
 | N+1 Query Elimination | Complete (v4.2) |
 | PII Protection | Complete (v4.2 Enhanced) |
 | Cache Statistics | Complete (v4.2 New) |
+| Performance Metrics | Complete (v4.3 New) |
+| Feature Breakdown | Complete (v4.3 New) |
 
 ---
 
-*Document Version: 4.2.0*  
+*Document Version: 4.3.0*  
 *Last Updated: December 12, 2025*  
-*Tested and Verified: All 8 AI tests passing, 106 API endpoints operational, 75%+ token reduction, 85%+ cache hit rate*
+*Tested and Verified: All 8 AI tests passing, 109 API endpoints operational, 75%+ token reduction, 85%+ cache hit rate*

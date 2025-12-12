@@ -1794,7 +1794,7 @@ export async function registerRoutes(
     }
   });
 
-  // AI Cache Statistics Endpoint (v4.2)
+  // AI Cache Statistics Endpoint (v4.3.0 Enhanced)
   app.get("/api/ai/cache-stats", async (req, res) => {
     try {
       const { getCacheStats, getAIConfig } = await import("./openai");
@@ -1804,8 +1804,78 @@ export async function registerRoutes(
         cacheEnabled: config.cacheEnabled,
         cacheTTLMs: config.cacheTTLMs,
         maxCacheEntries: config.maxCacheEntries,
+        lruEviction: config.lruEviction,
+        requestDeduplication: config.requestDeduplication,
+        compressionEnabled: config.compressionEnabled,
+        performanceTracking: config.performanceTracking,
         ...stats,
         version: config.version,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // v4.3.0 Cache management endpoints
+  app.post("/api/ai/cache-clear", async (req, res) => {
+    try {
+      const { clearCache } = await import("./openai");
+      clearCache();
+      res.json({ success: true, message: "AI cache cleared successfully" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/ai/cache-reset-stats", async (req, res) => {
+    try {
+      const { resetCacheStats } = await import("./openai");
+      resetCacheStats();
+      res.json({ success: true, message: "Cache statistics reset successfully" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // v4.3.0 Performance monitoring endpoint
+  app.get("/api/ai/performance", async (req, res) => {
+    try {
+      const { getCacheStats, getAIConfig, getAIAuditLog } = await import("./openai");
+      const stats = getCacheStats();
+      const config = getAIConfig();
+      const auditLog = getAIAuditLog();
+      
+      // Calculate performance metrics from recent audit entries
+      const recentLogs = auditLog.slice(-100);
+      const aiCallsCount = recentLogs.filter(l => l.model !== "cache").length;
+      const cacheHitsCount = recentLogs.filter(l => l.model === "cache").length;
+      const fallbackCount = recentLogs.filter(l => l.fallbackUsed).length;
+      
+      res.json({
+        version: config.version,
+        performance: {
+          avgLatencyMs: stats.avgLatencyMs,
+          cacheHitRate: stats.hitRate,
+          totalRequests: stats.hitCount + stats.missCount,
+          deduplicatedRequests: stats.deduplicatedRequests,
+          evictions: stats.evictionCount,
+          memoryUsageKB: stats.memoryEstimateKB,
+        },
+        recentActivity: {
+          totalCalls: recentLogs.length,
+          aiCalls: aiCallsCount,
+          cacheHits: cacheHitsCount,
+          fallbacks: fallbackCount,
+          fallbackRate: recentLogs.length > 0 ? Math.round((fallbackCount / recentLogs.length) * 100) : 0,
+        },
+        featureBreakdown: stats.featureBreakdown,
+        config: {
+          model: config.model,
+          maxTokens: config.maxTokens,
+          temperature: config.temperature,
+          lruEviction: config.lruEviction,
+          requestDeduplication: config.requestDeduplication,
+        },
       });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
