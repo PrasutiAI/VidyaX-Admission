@@ -203,7 +203,7 @@ export default function Applications() {
       ? filteredApplications.filter(app => selectedIds.has(app.id))
       : filteredApplications;
 
-    const headers = ["Application No", "First Name", "Last Name", "Grade", "Status", "Applied Date", "Father Email", "Father Phone"];
+    const headers = ["Application No", "First Name", "Last Name", "Grade", "Status", "Applied Date", "Father Email", "Father Contact"];
     const rows = dataToExport.map(app => [
       app.applicationNumber || "",
       app.studentFirstName || "",
@@ -212,7 +212,7 @@ export default function Applications() {
       statusLabels[app.status as ApplicationStatus] || app.status || "",
       app.applicationDate ? format(new Date(app.applicationDate), "yyyy-MM-dd") : "",
       app.fatherEmail || "",
-      app.fatherPhone || "",
+      app.fatherContact || "",
     ]);
 
     const csvContent = [
