@@ -1,6 +1,6 @@
 # Student Admission Management Service
 
-## Enterprise Edition v4.8.0 - AI-Powered Platform (Ultimate Optimization & Cost Efficiency)
+## Enterprise Edition v4.9.0 - AI-Powered Platform (Enhanced UI & Workflow Management)
 
 ### Version History
 
@@ -30,7 +30,8 @@
 | 4.5.0 | 2025-12-12 | Ultimate Optimization: Circuit breaker patterns, smart retry with exponential backoff, enhanced prompt compression, bulk token budgets, comprehensive metrics | Complete |
 | 4.6.0 | 2025-12-12 | Enhanced Features: Response streaming ready, optimized fallback system, enhanced connection management, improved memory efficiency, extended audit logging | Complete |
 | 4.7.0 | 2025-12-12 | Maximum Optimization: Dynamic token budget allocation, ultra-compression (Level 3), micro token tier, real-time cost tracking, context-aware compression, intelligent caching, prefetch support | Complete |
-| **4.8.0** | **2025-12-13** | **Documentation & Stability: Comprehensive version history update, enhanced code documentation, stability improvements, maintained proven token budgets for reliability** | **Complete** |
+| 4.8.0 | 2025-12-13 | Documentation & Stability: Comprehensive version history update, enhanced code documentation, stability improvements, maintained proven token budgets for reliability | Complete |
+| **4.9.0** | **2025-12-13** | **Enhanced UI & Workflow Management: Modern Notifications page, centralized Documents management, Screening dashboard for tests/interviews, Enrollment workflow with funnel visualization, improved sidebar navigation, new API endpoints, bug fixes** | **Complete** |
 
 ---
 
@@ -42,7 +43,7 @@ The Student Admission Management Service is an **enterprise-grade platform** tha
 
 ```
 +==================================================================================+
-|                    STUDENT ADMISSION SERVICE - ENTERPRISE v4.7                   |
+|                    STUDENT ADMISSION SERVICE - ENTERPRISE v4.9                   |
 +==================================================================================+
 |                                                                                  |
 |  +---------------------------+  +---------------------------+                    |
@@ -97,9 +98,69 @@ The Student Admission Management Service is an **enterprise-grade platform** tha
 
 ---
 
-## 2. Enhanced Features v4.7 - Maximum Optimization & Cost Efficiency
+## 2. Enhanced Features v4.9 - Enhanced UI & Workflow Management
 
-### 2.0 New in v4.7.0
+### 2.0 New in v4.9.0
+
+**Key Enhancements:**
+
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| **Notifications Page** | Real-time notification management with filtering, batch actions, type badges | Centralized notification center |
+| **Documents Page** | Centralized document tracking with stats cards, verification workflow, progress visualization | Streamlined document management |
+| **Screening Page** | Entrance tests and interviews dashboard with tabs, scoring dialogs, date indicators | Unified screening management |
+| **Enrollment Page** | Enrollment funnel with offer generation, acceptance tracking, completion workflow | End-to-end enrollment visibility |
+| **Improved Navigation** | Enhanced sidebar with Documents, Screening, Enrollment, Notifications sections | Better workflow accessibility |
+| **New API Endpoints** | 8 new REST endpoints for documents, screening, and enrollment management | Complete API coverage |
+| **Bug Fixes** | Fixed fatherPhone -> fatherContact in applications export | Data integrity |
+
+**v4.9.0 New Pages:**
+
+1. **Notifications Page** (`/notifications`)
+   - Filter by read/unread status
+   - Filter by notification type (info, success, warning, error)
+   - Batch mark as read functionality
+   - Direct navigation to related applications
+   - Time-ago timestamps
+
+2. **Documents Page** (`/documents`)
+   - Stats cards: Total, Verified, Pending, Rejected
+   - Verification progress bar
+   - Search by name, app number, or filename
+   - Filter by status and document type
+   - Quick verify/reject actions with remarks
+   - Document preview and download
+
+3. **Screening Page** (`/screening`)
+   - Tab view: Entrance Tests / Interviews
+   - Stats: Total Scheduled, Completed Today, Upcoming, Average Score, Pass Rate
+   - Date badges (Today, Tomorrow, Past)
+   - Score entry dialog with notes
+   - Color-coded scores (green >= 80, amber >= 60, red < 60)
+
+4. **Enrollment Page** (`/enrollment`)
+   - Tab view: Ready for Offer / Offers / Enrolled
+   - Enrollment funnel visualization
+   - Stats: Pending, Extended, Accepted, Enrolled, Conversion Rate
+   - Generate offer with remarks
+   - Accept offer and complete enrollment actions
+   - Link to offer letter
+
+**v4.9.0 New API Endpoints:**
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/documents` | GET | List all documents with application info |
+| `/api/documents/stats` | GET | Document verification statistics |
+| `/api/screening/entrance-tests` | GET | List entrance test events |
+| `/api/screening/interviews` | GET | List interview events |
+| `/api/screening/stats` | GET | Screening statistics |
+| `/api/enrollment/candidates` | GET | List enrollment candidates |
+| `/api/enrollment/stats` | GET | Enrollment funnel statistics |
+
+---
+
+### 2.1 Previous Features (v4.7)
 
 **Key Enhancements:**
 

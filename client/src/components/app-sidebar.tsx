@@ -1,4 +1,5 @@
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   CalendarRange,
@@ -7,6 +8,10 @@ import {
   Settings,
   GraduationCap,
   BarChart3,
+  Bell,
+  FolderOpen,
+  ClipboardCheck,
+  UserCheck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -40,6 +45,21 @@ const navigationItems = [
     icon: FileText,
   },
   {
+    title: "Documents",
+    url: "/documents",
+    icon: FolderOpen,
+  },
+  {
+    title: "Screening",
+    url: "/screening",
+    icon: ClipboardCheck,
+  },
+  {
+    title: "Enrollment",
+    url: "/enrollment",
+    icon: UserCheck,
+  },
+  {
     title: "Seat Management",
     url: "/seats",
     icon: Users,
@@ -48,6 +68,11 @@ const navigationItems = [
     title: "Reports",
     url: "/reports",
     icon: BarChart3,
+  },
+  {
+    title: "Notifications",
+    url: "/notifications",
+    icon: Bell,
   },
 ];
 

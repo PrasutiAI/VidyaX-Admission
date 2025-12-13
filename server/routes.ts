@@ -753,6 +753,191 @@ export async function registerRoutes(
     }
   });
 
+  // Enhanced Documents API (v4.9.0)
+  app.get("/api/documents", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const allDocs: any[] = [];
+      
+      for (const app of applications) {
+        const docs = await storage.getApplicationDocuments(app.id);
+        docs.forEach(doc => {
+          allDocs.push({
+            ...doc,
+            applicationId: app.id,
+            applicationNumber: app.applicationNumber,
+            studentName: `${app.studentFirstName} ${app.studentLastName}`,
+          });
+        });
+      }
+      
+      res.json(allDocs);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/documents/stats", async (req, res) => {
+    try {
+      const report = await storage.getDocumentVerificationReport();
+      res.json({
+        total: report.totalDocuments,
+        verified: report.verified,
+        pending: report.pending,
+        rejected: report.rejected,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Enhanced Screening API (v4.9.0)
+  app.get("/api/screening/entrance-tests", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const events = applications
+        .filter(app => app.entranceTestDate)
+        .map(app => ({
+          id: app.id,
+          applicationNumber: app.applicationNumber,
+          studentName: `${app.studentFirstName} ${app.studentLastName}`,
+          grade: app.gradeAppliedFor,
+          type: "entrance_test" as const,
+          scheduledDate: app.entranceTestDate,
+          score: app.entranceTestScore ? Number(app.entranceTestScore) : undefined,
+          status: app.status,
+        }));
+      res.json(events);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/screening/interviews", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const events = applications
+        .filter(app => app.interviewDate)
+        .map(app => ({
+          id: app.id,
+          applicationNumber: app.applicationNumber,
+          studentName: `${app.studentFirstName} ${app.studentLastName}`,
+          grade: app.gradeAppliedFor,
+          type: "interview" as const,
+          scheduledDate: app.interviewDate,
+          score: app.interviewScore ? Number(app.interviewScore) : undefined,
+          notes: app.interviewNotes,
+          status: app.status,
+        }));
+      res.json(events);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/screening/stats", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const today = new Date().toISOString().split('T')[0];
+      const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      const testsWithScores = applications.filter(a => a.entranceTestScore);
+      const interviewsWithScores = applications.filter(a => a.interviewScore);
+      
+      const allScores = [
+        ...testsWithScores.map(a => Number(a.entranceTestScore)),
+        ...interviewsWithScores.map(a => Number(a.interviewScore)),
+      ];
+      
+      const avgScore = allScores.length > 0 
+        ? Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length) 
+        : 0;
+      
+      const passedCount = allScores.filter(s => s >= 60).length;
+      const passRate = allScores.length > 0 
+        ? Math.round((passedCount / allScores.length) * 100) 
+        : 0;
+      
+      const scheduledEvents = applications.filter(a => a.entranceTestDate || a.interviewDate);
+      const completedToday = scheduledEvents.filter(a => 
+        (a.entranceTestDate === today && a.entranceTestScore) ||
+        (a.interviewDate === today && a.interviewScore)
+      ).length;
+      
+      const upcomingThisWeek = scheduledEvents.filter(a => 
+        (a.entranceTestDate && a.entranceTestDate >= today && a.entranceTestDate <= nextWeek) ||
+        (a.interviewDate && a.interviewDate >= today && a.interviewDate <= nextWeek)
+      ).length;
+      
+      res.json({
+        totalScheduled: scheduledEvents.length,
+        completedToday,
+        upcomingThisWeek,
+        averageScore: avgScore,
+        passRate,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Enhanced Enrollment API (v4.9.0)
+  app.get("/api/enrollment/candidates", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      const candidates = applications
+        .filter(app => [
+          "interview_completed", "under_review", "waitlisted",
+          "offer_extended", "offer_accepted", "enrolled"
+        ].includes(app.status))
+        .map(app => ({
+          id: app.id,
+          applicationNumber: app.applicationNumber,
+          studentName: `${app.studentFirstName} ${app.studentLastName}`,
+          grade: app.gradeAppliedFor,
+          status: app.status,
+          entranceTestScore: app.entranceTestScore ? Number(app.entranceTestScore) : undefined,
+          interviewScore: app.interviewScore ? Number(app.interviewScore) : undefined,
+          decisionDate: app.decisionDate,
+          decisionRemarks: app.decisionRemarks,
+          fatherEmail: app.fatherEmail,
+          fatherContact: app.fatherContact,
+        }));
+      res.json(candidates);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/enrollment/stats", async (req, res) => {
+    try {
+      const applications = await storage.getApplications();
+      
+      const pendingOffers = applications.filter(a => 
+        ["interview_completed", "under_review", "waitlisted"].includes(a.status)
+      ).length;
+      
+      const offersExtended = applications.filter(a => a.status === "offer_extended").length;
+      const offersAccepted = applications.filter(a => a.status === "offer_accepted").length;
+      const enrolled = applications.filter(a => a.status === "enrolled").length;
+      
+      const totalOffered = offersExtended + offersAccepted + enrolled;
+      const conversionRate = totalOffered > 0 
+        ? Math.round(((offersAccepted + enrolled) / totalOffered) * 100) 
+        : 0;
+      
+      res.json({
+        pendingOffers,
+        offersExtended,
+        offersAccepted,
+        enrolled,
+        conversionRate,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Analytics
   app.get("/api/analytics/applications-by-status", async (req, res) => {
     try {

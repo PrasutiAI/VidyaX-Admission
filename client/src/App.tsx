@@ -13,8 +13,12 @@ import Cycles from "@/pages/cycles";
 import Applications from "@/pages/applications";
 import ApplicationForm from "@/pages/application-form";
 import ApplicationDetail from "@/pages/application-detail";
+import Documents from "@/pages/documents";
+import Screening from "@/pages/screening";
+import Enrollment from "@/pages/enrollment";
 import Seats from "@/pages/seats";
 import Reports from "@/pages/reports";
+import Notifications from "@/pages/notifications";
 import Settings from "@/pages/settings";
 
 function Router() {
@@ -25,8 +29,12 @@ function Router() {
       <Route path="/applications" component={Applications} />
       <Route path="/applications/new" component={ApplicationForm} />
       <Route path="/applications/:id" component={ApplicationDetail} />
+      <Route path="/documents" component={Documents} />
+      <Route path="/screening" component={Screening} />
+      <Route path="/enrollment" component={Enrollment} />
       <Route path="/seats" component={Seats} />
       <Route path="/reports" component={Reports} />
+      <Route path="/notifications" component={Notifications} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
