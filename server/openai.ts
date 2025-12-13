@@ -3,15 +3,15 @@ import type { AdmissionApplication, ApplicationDocument } from "@shared/schema";
 
 const AI_CONFIG = {
   model: "gpt-4o-mini",
-  version: "4.7.0",
+  version: "4.8.0",
   temperature: 0.3,
   maxTokens: 512,
   tokenBudgets: {
     micro: 64,        // Single value lookups, yes/no checks
-    simple: 128,      // Status checks, basic scoring (reduced from 192)
-    standard: 256,    // Recommendations, eligibility (reduced from 384)
-    complex: 512,     // Detailed analysis, comparisons (reduced from 768)
-    bulk: 96,         // Batch operations, minimal tokens (reduced from 128)
+    simple: 128,      // Status checks, basic scoring
+    standard: 256,    // Recommendations, eligibility
+    complex: 512,     // Detailed analysis, comparisons
+    bulk: 96,         // Batch operations, minimal tokens
   },
   confidenceThresholds: {
     recommendations: 0.70,
